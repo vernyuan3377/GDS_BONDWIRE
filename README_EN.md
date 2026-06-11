@@ -76,8 +76,3 @@ rotation, and every BondWire connection.
 ```powershell
 python -m pytest -q
 ```
-
-## Repository Contents
-
-The default `.gitignore` excludes `DATA`, `vendor`, PDFs, and local `.bondwire.json` project files to
-avoid accidentally publishing design data or generated files.
