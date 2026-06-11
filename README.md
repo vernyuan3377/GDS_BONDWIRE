@@ -70,8 +70,3 @@ PAD，并从 AP Pin 文本中匹配 PAD 名称。
 ```powershell
 python -m pytest -q
 ```
-
-## 仓库内容说明
-
-默认 `.gitignore` 不提交 `DATA`、`vendor`、PDF 和本地 `.bondwire.json` 工程文件，避免设计数据
-或生成文件被意外公开。
