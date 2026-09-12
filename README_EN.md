@@ -13,10 +13,10 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
 - Read GDSII files and identify chip pads and names using configurable `CB Drawing` and `AP Pin`
   layers.
 - Adjust chip position, chip rotation, and PCB footprint rotation.
-- Draw manual PCB pads in the BondWire workspace with arbitrary numbers, sizes, rotations, and
-  shapes.
-- Move manual pads directly on the canvas and align or distribute them left/right/top/bottom and
-  horizontally/vertically.
+- Draw manual PCB pads in the BondWire workspace with arbitrary numbers, positions, sizes,
+  rotations, shapes, and colors.
+- Move manual pads directly on the canvas, edit coordinates in mil or mm, and align or distribute
+  them left/right/top/bottom and horizontally/vertically.
 - Keep chip pad labels upright while the chip rotates.
 - Create BondWires by clicking chip pads, external labels, or PCB pads.
 - Double-click non-pad areas to create free connection endpoints.
@@ -61,7 +61,7 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
    depth `10`.
 3. Adjust chip placement, chip rotation, and PCB footprint rotation.
 4. If you need a custom reference footprint, add manual pads in the footprint drawing controls,
-   then drag, align, or distribute them on the canvas.
+   enter coordinates and sizes in mil or mm, then drag, align, or distribute them on the canvas.
 5. Switch to BondWire drawing mode and click the chip and PCB endpoints.
 6. Drag wire endpoints to fine-tune landing positions.
 7. Open the 3D view and adjust the wire midpoint, loop height, or target length.

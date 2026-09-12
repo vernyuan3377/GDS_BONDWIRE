@@ -23,6 +23,7 @@ def test_project_round_trip():
                 rotation_deg=90.0,
                 shape="rect",
                 manual=True,
+                fill_color="#00ff00",
             )
         ],
         bonds=[

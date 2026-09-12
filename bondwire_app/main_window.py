@@ -60,6 +60,9 @@ from .simulation import (
 from .three_d import Bond3DDialog
 
 
+MIL_PER_MM = 1000.0 / 25.4
+
+
 class CanvasView(QGraphicsView):
     def __init__(self, scene: QGraphicsScene, click_handler, double_click_handler):
         super().__init__(scene)
@@ -155,9 +158,13 @@ class MainWindow(QMainWindow):
         self.pending_free_pos: QPointF | None = None
         self.pending_free_item: FreeEndpointMarkerItem | None = None
         self.updating_transform = False
+        self.updating_manual_pad_controls = False
+        self.manual_pad_unit_name = "mil"
+        self.manual_pad_color = "#ff1010"
         self.three_d_dialog: Bond3DDialog | None = None
 
         self.scene = QGraphicsScene(self)
+        self.scene.selectionChanged.connect(self.sync_manual_pad_controls_from_selection)
         self.view = CanvasView(self.scene, self.handle_canvas_click, self.handle_canvas_double_click)
         self._build_ui()
         self._build_toolbar()
@@ -272,28 +279,43 @@ class MainWindow(QMainWindow):
         footprint_layout = QVBoxLayout(footprint_group)
         footprint_form = QFormLayout()
         self.manual_pad_number = QLineEdit("1")
+        self.manual_pad_unit = QComboBox()
+        self.manual_pad_unit.addItems(["mil", "mm"])
+        self.manual_pad_unit.currentTextChanged.connect(self.change_manual_pad_unit)
+        self.manual_pad_x = self._double_spin(-100000, 100000, 0.0, 4)
+        self.manual_pad_y = self._double_spin(-100000, 100000, 0.0, 4)
         self.manual_pad_width = self._double_spin(0.01, 100000, 20.0, 3)
         self.manual_pad_height = self._double_spin(0.01, 100000, 8.0, 3)
         self.manual_pad_rotation = self._double_spin(-360, 360, 0.0, 2)
         self.manual_pad_shape = QComboBox()
         self.manual_pad_shape.addItems(["roundrect", "rect", "round", "octagon"])
-        for box in (self.manual_pad_width, self.manual_pad_height):
-            box.setSuffix(" mil")
+        self.manual_pad_color_button = QPushButton()
+        self.manual_pad_color_button.clicked.connect(self.choose_manual_pad_color)
+        self._update_manual_pad_color_button()
+        for box in (self.manual_pad_x, self.manual_pad_y, self.manual_pad_width, self.manual_pad_height):
             box.setSingleStep(1.0)
         self.manual_pad_rotation.setSuffix(" deg")
         footprint_form.addRow("编号", self.manual_pad_number)
+        footprint_form.addRow("单位", self.manual_pad_unit)
+        footprint_form.addRow("X", self.manual_pad_x)
+        footprint_form.addRow("Y", self.manual_pad_y)
         footprint_form.addRow("宽度", self.manual_pad_width)
         footprint_form.addRow("高度", self.manual_pad_height)
         footprint_form.addRow("旋转", self.manual_pad_rotation)
         footprint_form.addRow("形状", self.manual_pad_shape)
+        footprint_form.addRow("颜色", self.manual_pad_color_button)
         footprint_layout.addLayout(footprint_form)
+        self._update_manual_pad_unit_suffixes()
 
         manual_button_row = QHBoxLayout()
         add_pad_button = QPushButton("添加 PAD")
         add_pad_button.clicked.connect(self.add_manual_pad_from_controls)
+        update_pad_button = QPushButton("更新所选 PAD")
+        update_pad_button.clicked.connect(self.apply_manual_pad_controls_to_selection)
         delete_pad_button = QPushButton("删除手工 PAD")
         delete_pad_button.clicked.connect(self.delete_selected_manual_pads)
         manual_button_row.addWidget(add_pad_button)
+        manual_button_row.addWidget(update_pad_button)
         manual_button_row.addWidget(delete_pad_button)
         footprint_layout.addLayout(manual_button_row)
 
@@ -441,6 +463,98 @@ class MainWindow(QMainWindow):
     def update_pdf_label_option(self, checked: bool) -> None:
         self.project.pdf_include_chip_pad_labels = checked
 
+    def _manual_pad_scale(self, unit: str | None = None) -> float:
+        return MIL_PER_MM if (unit or self.manual_pad_unit_name) == "mm" else 1.0
+
+    def _display_to_mil(self, value: float, unit: str | None = None) -> float:
+        return value * self._manual_pad_scale(unit)
+
+    def _mil_to_display(self, value: float, unit: str | None = None) -> float:
+        return value / self._manual_pad_scale(unit)
+
+    def _set_spin_value_blocked(self, box: QDoubleSpinBox, value: float) -> None:
+        box.blockSignals(True)
+        box.setValue(value)
+        box.blockSignals(False)
+
+    def _update_manual_pad_unit_suffixes(self) -> None:
+        unit = self.manual_pad_unit_name
+        scale = self._manual_pad_scale()
+        decimals = 4 if unit == "mm" else 3
+        step = 0.01 if unit == "mm" else 1.0
+        for box in (self.manual_pad_x, self.manual_pad_y):
+            box.setDecimals(decimals)
+            box.setRange(-100000 / scale, 100000 / scale)
+            box.setSingleStep(step)
+            box.setSuffix(f" {unit}")
+        for box in (self.manual_pad_width, self.manual_pad_height):
+            box.setDecimals(decimals)
+            box.setRange(0.01 / scale, 100000 / scale)
+            box.setSingleStep(step)
+            box.setSuffix(f" {unit}")
+
+    def change_manual_pad_unit(self, unit: str) -> None:
+        if unit == self.manual_pad_unit_name:
+            return
+        old_unit = self.manual_pad_unit_name
+        values_mil = {
+            self.manual_pad_x: self._display_to_mil(self.manual_pad_x.value(), old_unit),
+            self.manual_pad_y: self._display_to_mil(self.manual_pad_y.value(), old_unit),
+            self.manual_pad_width: self._display_to_mil(self.manual_pad_width.value(), old_unit),
+            self.manual_pad_height: self._display_to_mil(self.manual_pad_height.value(), old_unit),
+        }
+        self.manual_pad_unit_name = unit
+        self._update_manual_pad_unit_suffixes()
+        for box, value_mil in values_mil.items():
+            self._set_spin_value_blocked(box, self._mil_to_display(value_mil))
+        self.sync_manual_pad_controls_from_selection()
+
+    def _update_manual_pad_color_button(self) -> None:
+        color = QColor(self.manual_pad_color)
+        text_color = "#000000" if color.lightness() > 145 else "#ffffff"
+        self.manual_pad_color_button.setText(self.manual_pad_color.upper())
+        self.manual_pad_color_button.setStyleSheet(
+            f"QPushButton {{ background-color: {self.manual_pad_color}; color: {text_color}; "
+            "font-weight: bold; min-height: 24px; }"
+        )
+
+    def choose_manual_pad_color(self) -> None:
+        color = QColorDialog.getColor(QColor(self.manual_pad_color), self, "选择 PCB PAD 颜色")
+        if not color.isValid():
+            return
+        self.manual_pad_color = color.name()
+        self._update_manual_pad_color_button()
+        selected = self._selected_manual_pad_items()
+        if selected:
+            for item in selected:
+                item.pad.fill_color = self.manual_pad_color
+                item.update()
+            self._sync_manual_board_pads()
+            self.statusBar().showMessage(f"已更新 {len(selected)} 个手工 PAD 的颜色。")
+
+    def sync_manual_pad_controls_from_selection(self) -> None:
+        if self.updating_manual_pad_controls:
+            return
+        selected = self._selected_manual_pad_items()
+        if not selected:
+            return
+        pad = selected[0].pad
+        self.updating_manual_pad_controls = True
+        try:
+            self.manual_pad_number.setText(pad.number)
+            self._set_spin_value_blocked(self.manual_pad_x, self._mil_to_display(pad.x_mil))
+            self._set_spin_value_blocked(self.manual_pad_y, self._mil_to_display(pad.y_mil))
+            self._set_spin_value_blocked(self.manual_pad_width, self._mil_to_display(pad.width_mil))
+            self._set_spin_value_blocked(self.manual_pad_height, self._mil_to_display(pad.height_mil))
+            self._set_spin_value_blocked(self.manual_pad_rotation, pad.rotation_deg)
+            self.manual_pad_shape.blockSignals(True)
+            self.manual_pad_shape.setCurrentText(pad.shape)
+            self.manual_pad_shape.blockSignals(False)
+            self.manual_pad_color = pad.fill_color or "#ff1010"
+            self._update_manual_pad_color_button()
+        finally:
+            self.updating_manual_pad_controls = False
+
     def choose_pcblib(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "打开 Altium PcbLib", "", "Altium PcbLib (*.PcbLib)")
         if path:
@@ -570,6 +684,48 @@ class MainWindow(QMainWindow):
         self._sync_manual_board_pads()
         self.update_bond_items()
         self._update_pcb_info()
+        self.sync_manual_pad_controls_from_selection()
+
+    def apply_manual_pad_controls_to_selection(self) -> None:
+        if self.updating_manual_pad_controls:
+            return
+        selected = self._selected_manual_pad_items()
+        if not selected:
+            self.statusBar().showMessage("请先选择需要更新的手工 PAD。")
+            return
+        new_number = self.manual_pad_number.text().strip()
+        if len(selected) == 1 and new_number:
+            item = selected[0]
+            old_number = item.pad.number
+            if new_number != old_number:
+                if new_number in self.board_items:
+                    self.statusBar().showMessage(f"PAD {new_number} 已存在，请换一个编号。")
+                    return
+                self.board_items.pop(old_number, None)
+                item.pad.number = new_number
+                self.board_items[new_number] = item
+                item.setToolTip(f"PCB PAD {new_number}")
+                for bond in self.project.bonds:
+                    if bond.board_endpoint_type == "pad" and bond.board_pad == old_number:
+                        bond.board_pad = new_number
+        width_mil = self._display_to_mil(self.manual_pad_width.value())
+        height_mil = self._display_to_mil(self.manual_pad_height.value())
+        color = self.manual_pad_color
+        for item in selected:
+            pad = item.pad
+            if len(selected) == 1:
+                pad.x_mil = self._display_to_mil(self.manual_pad_x.value())
+                pad.y_mil = self._display_to_mil(self.manual_pad_y.value())
+            pad.width_mil = width_mil
+            pad.height_mil = height_mil
+            pad.rotation_deg = self.manual_pad_rotation.value()
+            pad.shape = self.manual_pad_shape.currentText()
+            pad.fill_color = color
+            item.sync_from_pad()
+        self._sync_manual_board_pads()
+        self.update_bond_items()
+        self.sync_manual_pad_controls_from_selection()
+        self.statusBar().showMessage(f"已更新 {len(selected)} 个手工 PAD。")
 
     def add_manual_pad_from_controls(self) -> None:
         number = self.manual_pad_number.text().strip()
@@ -580,28 +736,25 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"PAD {number} 已存在，请换一个编号。")
             return
         self._ensure_board_container()
-        scene_pos = self.view.mapToScene(self.view.viewport().rect().center())
-        local_pos = (
-            self.board_assembly_item.mapFromScene(scene_pos)
-            if self.board_assembly_item is not None
-            else scene_pos
-        )
         pad = BoardPad(
             number=number,
-            x_mil=local_pos.x(),
-            y_mil=local_pos.y(),
-            width_mil=self.manual_pad_width.value(),
-            height_mil=self.manual_pad_height.value(),
+            x_mil=self._display_to_mil(self.manual_pad_x.value()),
+            y_mil=self._display_to_mil(self.manual_pad_y.value()),
+            width_mil=self._display_to_mil(self.manual_pad_width.value()),
+            height_mil=self._display_to_mil(self.manual_pad_height.value()),
             rotation_deg=self.manual_pad_rotation.value(),
             shape=self.manual_pad_shape.currentText(),
             corner_radius_percent=50.0,
             manual=True,
+            fill_color=self.manual_pad_color,
         )
         self.project.manual_board_pads.append(pad)
-        self._add_board_pad_item(pad)
+        item = self._add_board_pad_item(pad)
+        self.scene.clearSelection()
+        item.setSelected(True)
         self._sync_manual_board_pads()
         self._update_pcb_info()
-        self.manual_pad_number.setText(self._next_manual_pad_number())
+        self.sync_manual_pad_controls_from_selection()
         self.statusBar().showMessage(f"已添加手工 PCB PAD {number}，可在移动模式下拖动它。")
 
     def delete_selected_manual_pads(self) -> None:
@@ -1276,13 +1429,14 @@ class MainWindow(QMainWindow):
                 "End.",
                 "",
                 "{ PAD_TABLE_CSV",
-                "number,x_mil,y_mil,width_mil,height_mil,rotation_deg,shape,manual",
+                "number,x_mil,y_mil,width_mil,height_mil,rotation_deg,shape,manual,fill_color",
             ]
         )
         for pad in pads:
             lines.append(
                 f"{pad.number},{pad.x_mil:.6f},{pad.y_mil:.6f},{pad.width_mil:.6f},"
-                f"{pad.height_mil:.6f},{pad.rotation_deg:.6f},{pad.shape},{int(pad.manual)}"
+                f"{pad.height_mil:.6f},{pad.rotation_deg:.6f},{pad.shape},{int(pad.manual)},"
+                f"{pad.fill_color}"
             )
         lines.append("}")
         Path(path).write_text("\n".join(lines), encoding="utf-8")

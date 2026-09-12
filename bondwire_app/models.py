@@ -18,6 +18,7 @@ class BoardPad:
     solder_expansion_mil: float = 0.0
     corner_radius_percent: float = 50.0
     manual: bool = False
+    fill_color: str = "#ff1010"
 
 
 @dataclass

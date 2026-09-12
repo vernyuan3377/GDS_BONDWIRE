@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
@@ -294,7 +296,6 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
         item.pad.x_mil = x
         item.pad.y_mil = y
         item.sync_from_pad()
-        item.setSelected(True)
 
     assert window.board is not None
     assert window.project.manual_board_pads == [window.board_items[name].pad for name in ("M1", "M2", "M3")]
@@ -303,6 +304,9 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
     window.board_items["M1"].setPos(QPointF(5.0, 6.0))
     assert (window.board_items["M1"].pad.x_mil, window.board_items["M1"].pad.y_mil) == (5.0, 6.0)
 
+    window.scene.clearSelection()
+    for name in ("M1", "M2", "M3"):
+        window.board_items[name].setSelected(True)
     window.align_selected_manual_pads("top")
     tops = {
         round(item.pad.y_mil - item.pad.height_mil / 2, 6)
@@ -329,6 +333,45 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
     assert all(item.pad.manual for item in restored.board_items.values())
 
     restored.close()
+    window.close()
+    app.processEvents()
+
+
+def test_manual_pad_position_color_and_mm_controls_update_selection():
+    app = QApplication.instance() or QApplication([])
+    mil_per_mm = 1000.0 / 25.4
+    window = MainWindow()
+
+    window.manual_pad_unit.setCurrentText("mm")
+    window.manual_pad_number.setText("MM1")
+    window.manual_pad_x.setValue(1.0)
+    window.manual_pad_y.setValue(2.0)
+    window.manual_pad_width.setValue(0.5)
+    window.manual_pad_height.setValue(0.25)
+    window.manual_pad_color = "#00ff00"
+    window._update_manual_pad_color_button()
+    window.add_manual_pad_from_controls()
+
+    item = window.board_items["MM1"]
+    assert item.pad.manual
+    assert item.pad.fill_color == "#00ff00"
+    assert item.pad.x_mil == pytest.approx(mil_per_mm)
+    assert item.pad.y_mil == pytest.approx(2.0 * mil_per_mm)
+    assert item.pad.width_mil == pytest.approx(0.5 * mil_per_mm)
+
+    item.setPos(QPointF(3.0 * mil_per_mm, 4.0 * mil_per_mm))
+    assert window.manual_pad_x.value() == pytest.approx(3.0)
+    assert window.manual_pad_y.value() == pytest.approx(4.0)
+
+    window.manual_pad_x.setValue(5.0)
+    window.manual_pad_y.setValue(6.0)
+    window.manual_pad_color = "#0000ff"
+    window._update_manual_pad_color_button()
+    window.apply_manual_pad_controls_to_selection()
+    assert item.pad.x_mil == pytest.approx(5.0 * mil_per_mm)
+    assert item.pad.y_mil == pytest.approx(6.0 * mil_per_mm)
+    assert item.pad.fill_color == "#0000ff"
+
     window.close()
     app.processEvents()
 

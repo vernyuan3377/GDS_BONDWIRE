@@ -191,8 +191,9 @@ class BoardPadItem(QGraphicsObject):
             )
         )
 
-        painter.setPen(QPen(QColor("#ff6060"), 0))
-        painter.setBrush(QColor("#ff1010"))
+        pad_color = QColor(self.pad.fill_color or "#ff1010")
+        painter.setPen(QPen(pad_color.lighter(135), 0))
+        painter.setBrush(pad_color)
         painter.drawPath(_rounded_rect_path(self._rect(), self.pad.shape, self.pad.corner_radius_percent))
 
         if self.pending or self.hovered:
@@ -205,7 +206,8 @@ class BoardPadItem(QGraphicsObject):
             painter.setBrush(Qt.NoBrush)
             painter.drawPath(_rounded_rect_path(self._rect(1.0), self.pad.shape, self.pad.corner_radius_percent))
 
-        _draw_fitted_text(painter, self.pad.number, self._rect(), QColor("#ffffff"))
+        text_color = QColor("#000000") if pad_color.lightness() > 155 else QColor("#ffffff")
+        _draw_fitted_text(painter, self.pad.number, self._rect(), text_color)
 
 
 class BoardAssemblyItem(QGraphicsObject):
