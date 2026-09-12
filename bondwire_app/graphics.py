@@ -113,7 +113,8 @@ class BoardPadItem(QGraphicsObject):
         return QRectF(-width / 2, -height / 2, width, height)
 
     def boundingRect(self) -> QRectF:
-        return self._rect(self.pad.solder_expansion_mil).adjusted(-0.5, -0.5, 0.5, 0.5)
+        visible_expansion = max(self.pad.solder_expansion_mil, 1.0)
+        return self._rect(visible_expansion).adjusted(-1.0, -1.0, 1.0, 1.0)
 
     def shape(self) -> QPainterPath:
         return _rounded_rect_path(

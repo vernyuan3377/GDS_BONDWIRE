@@ -76,6 +76,7 @@ class CanvasView(QGraphicsView):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
         self.setDragMode(QGraphicsView.NoDrag)
+        self.setViewportUpdateMode(QGraphicsView.BoundingRectViewportUpdate)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.setBackgroundBrush(QColor("#666666"))

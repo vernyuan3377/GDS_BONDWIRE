@@ -376,6 +376,22 @@ def test_manual_pad_position_color_and_mm_controls_update_selection():
     app.processEvents()
 
 
+def test_manual_pad_bounding_rect_covers_selection_outline():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.manual_pad_number.setText("B1")
+    window.manual_pad_width.setValue(10.0)
+    window.manual_pad_height.setValue(4.0)
+    window.add_manual_pad_from_controls()
+
+    item = window.board_items["B1"]
+    assert item.boundingRect().contains(item._rect(1.0))
+    assert window.view.viewportUpdateMode() == QGraphicsView.BoundingRectViewportUpdate
+
+    window.close()
+    app.processEvents()
+
+
 def test_chip_pad_labels_are_arranged_on_their_nearest_edge():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()
