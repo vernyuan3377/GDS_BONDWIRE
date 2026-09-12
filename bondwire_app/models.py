@@ -17,6 +17,7 @@ class BoardPad:
     layer: int = 1
     solder_expansion_mil: float = 0.0
     corner_radius_percent: float = 50.0
+    manual: bool = False
 
 
 @dataclass
@@ -96,6 +97,7 @@ class ProjectData:
     bondwire_color: str = "#ff2d8d"
     bondwire_width_mil: float = 0.18
     pdf_include_chip_pad_labels: bool = True
+    manual_board_pads: list[BoardPad] = field(default_factory=list)
     bonds: list[Bond] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -106,6 +108,9 @@ class ProjectData:
         known = {field_name for field_name in cls.__dataclass_fields__}
         values = {key: value for key, value in data.items() if key in known}
         values["bonds"] = [Bond(**item) for item in data.get("bonds", [])]
+        values["manual_board_pads"] = [
+            BoardPad(**{**item, "manual": True}) for item in data.get("manual_board_pads", [])
+        ]
         return cls(**values)
 
     def resolve_paths(self, project_path: str | Path) -> None:

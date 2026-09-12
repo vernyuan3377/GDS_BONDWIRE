@@ -11,6 +11,8 @@
 - 读取 Altium 二进制 `PcbLib`，显示原生封装图形、第一金属层和 PAD 编号。
 - 读取 GDSII，通过可配置的 `CB Drawing` 和 `AP Pin` 层识别芯片 PAD 与名称。
 - 调整芯片位置、芯片旋转角度和 PCB 封装旋转角度。
+- 在打线界面绘制手工 PCB PAD，可设置任意编号、尺寸、旋转和形状。
+- 手工 PAD 可拖动，并支持左/右/上/下对齐和水平/垂直等距分布。
 - 芯片 PAD 标签保持屏幕正向，不随芯片旋转。
 - 点击芯片 PAD、外侧标签或 PCB PAD 创建 BondWire。
 - 双击非 PAD 区域创建自由连接端点。
@@ -21,6 +23,7 @@
 - 使用三维二次贝塞尔曲线积分计算真实打线长度。
 - 保存和打开 `.bondwire.json` 工程。
 - 导出 A3 横向 PDF，可选择是否包含芯片 PAD 标签。
+- 导出 AD26 封装参考 DelphiScript，并附带 PAD 坐标表。
 
 ## 安装
 
@@ -51,10 +54,11 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 1. 打开 `PcbLib` 和 GDS 文件。
 2. 检查 GDS 层映射。默认使用 `CB Drawing = 76/0`、`AP Pin = 126/0`，搜索深度为 `10`。
 3. 调整芯片位置、芯片旋转角度和 PCB 封装旋转角度。
-4. 切换到“绘制 BondWire”，依次点击芯片端点和 PCB 端点。
-5. 拖动连线两端微调落点。
-6. 打开“3D 视图”，调整打线中间点、高度或目标长度。
-7. 保存工程并导出 PDF。
+4. 如需自定义封装，在“封装绘制”区域添加手工 PAD，拖动位置后可批量对齐或等距分布。
+5. 切换到“绘制 BondWire”，依次点击芯片端点和 PCB 端点。
+6. 拖动连线两端微调落点。
+7. 打开“3D 视图”，调整打线中间点、高度或目标长度。
+8. 保存工程并导出 PDF，必要时导出 AD26 封装参考脚本。
 
 ## 识别说明
 
@@ -70,3 +74,22 @@ PAD，并从 AP Pin 文本中匹配 PAD 名称。
 ```powershell
 python -m pytest -q
 ```
+
+## 生成 Windows 免安装程序
+
+在 Windows PowerShell 中运行：
+
+```powershell
+.\build_windows.ps1
+```
+
+生成结果位于 `dist\GDS_BondWire`。将整个文件夹复制到其他 64 位 Windows 电脑，即可直接运行
+其中的 `GDS_BondWire.exe`，无需安装 Python。
+
+也可以生成单文件版本：
+
+```powershell
+.\build_windows.ps1 -OneFile
+```
+
+单文件版本位于 `dist\GDS_BondWire.exe`，但启动速度通常比目录版本慢。

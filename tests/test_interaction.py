@@ -278,6 +278,61 @@ def test_draw_mode_disables_chip_frame_and_metal_does_not_block_pads():
     app.processEvents()
 
 
+def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    project_path = tmp_path / "manual.bondwire.json"
+    script_path = tmp_path / "manual_ad26.pas"
+    window = MainWindow()
+
+    for number, x, y in (("M1", 0.0, 0.0), ("M2", 30.0, 10.0), ("M3", 90.0, 25.0)):
+        window.manual_pad_number.setText(number)
+        window.manual_pad_width.setValue(10.0)
+        window.manual_pad_height.setValue(4.0)
+        window.manual_pad_shape.setCurrentText("rect")
+        window.add_manual_pad_from_controls()
+        item = window.board_items[number]
+        item.pad.x_mil = x
+        item.pad.y_mil = y
+        item.sync_from_pad()
+        item.setSelected(True)
+
+    assert window.board is not None
+    assert window.project.manual_board_pads == [window.board_items[name].pad for name in ("M1", "M2", "M3")]
+    assert window.board_items["M1"].flags() & QGraphicsItem.ItemIsMovable
+
+    window.board_items["M1"].setPos(QPointF(5.0, 6.0))
+    assert (window.board_items["M1"].pad.x_mil, window.board_items["M1"].pad.y_mil) == (5.0, 6.0)
+
+    window.align_selected_manual_pads("top")
+    tops = {
+        round(item.pad.y_mil - item.pad.height_mil / 2, 6)
+        for item in (window.board_items["M1"], window.board_items["M2"], window.board_items["M3"])
+    }
+    assert len(tops) == 1
+
+    for name, x in (("M1", 0.0), ("M2", 30.0), ("M3", 90.0)):
+        window.board_items[name].pad.x_mil = x
+        window.board_items[name].sync_from_pad()
+    window.distribute_selected_manual_pads("x")
+    centers = [window.board_items[name].pad.x_mil for name in ("M1", "M2", "M3")]
+    assert centers == [0.0, 45.0, 90.0]
+
+    window.export_ad26_script(str(script_path))
+    script = script_path.read_text(encoding="utf-8")
+    assert "Pad.Name := 'M1'" in script
+    assert "M3,90.000000" in script
+
+    window.save_project(str(project_path))
+    restored = MainWindow()
+    restored.open_project(str(project_path))
+    assert set(restored.board_items) == {"M1", "M2", "M3"}
+    assert all(item.pad.manual for item in restored.board_items.values())
+
+    restored.close()
+    window.close()
+    app.processEvents()
+
+
 def test_chip_pad_labels_are_arranged_on_their_nearest_edge():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()

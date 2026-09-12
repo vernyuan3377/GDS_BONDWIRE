@@ -83,10 +83,16 @@ def _draw_fitted_text(
 
 
 class BoardPadItem(QGraphicsObject):
-    def __init__(self, pad: BoardPad, native_rendered: bool = False):
+    def __init__(
+        self,
+        pad: BoardPad,
+        native_rendered: bool = False,
+        changed: Callable[["BoardPadItem"], None] | None = None,
+    ):
         super().__init__()
         self.pad = pad
         self.native_rendered = native_rendered
+        self.changed = changed
         self.pending = False
         self.hovered = False
         self.setPos(pad.x_mil, pad.y_mil)
@@ -94,6 +100,12 @@ class BoardPadItem(QGraphicsObject):
         self.setZValue(10)
         self.setAcceptHoverEvents(True)
         self.setToolTip(f"PCB PAD {pad.number}")
+        if pad.manual:
+            self.setFlags(
+                QGraphicsItem.ItemIsMovable
+                | QGraphicsItem.ItemIsSelectable
+                | QGraphicsItem.ItemSendsGeometryChanges
+            )
 
     def _rect(self, expansion: float = 0.0) -> QRectF:
         width = self.pad.width_mil + expansion * 2
@@ -114,6 +126,12 @@ class BoardPadItem(QGraphicsObject):
         self.pending = pending
         self.update()
 
+    def sync_from_pad(self) -> None:
+        self.prepareGeometryChange()
+        self.setPos(self.pad.x_mil, self.pad.y_mil)
+        self.setRotation(-self.pad.rotation_deg)
+        self.update()
+
     def hoverEnterEvent(self, event) -> None:
         self.hovered = True
         self.update()
@@ -123,6 +141,15 @@ class BoardPadItem(QGraphicsObject):
         self.hovered = False
         self.update()
         super().hoverLeaveEvent(event)
+
+    def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value):
+        result = super().itemChange(change, value)
+        if change == QGraphicsItem.ItemPositionHasChanged and self.pad.manual:
+            self.pad.x_mil = self.pos().x()
+            self.pad.y_mil = self.pos().y()
+            if self.changed:
+                self.changed(self)
+        return result
 
     def paint(
         self,
@@ -143,6 +170,16 @@ class BoardPadItem(QGraphicsObject):
                     )
                 )
             _draw_fitted_text(painter, self.pad.number, self._rect(), QColor("#ffffff"))
+            if self.isSelected():
+                painter.setPen(QPen(QColor("#00ffff"), 0.25))
+                painter.setBrush(Qt.NoBrush)
+                painter.drawPath(
+                    _rounded_rect_path(
+                        self._rect(1.0),
+                        self.pad.shape,
+                        self.pad.corner_radius_percent,
+                    )
+                )
             return
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor("#8d0096"))
@@ -162,6 +199,11 @@ class BoardPadItem(QGraphicsObject):
             painter.setPen(QPen(QColor("#00ffff") if self.hovered else QColor("#ffe600"), 0.35))
             painter.setBrush(Qt.NoBrush)
             painter.drawPath(_rounded_rect_path(self._rect(0.5), self.pad.shape, self.pad.corner_radius_percent))
+
+        if self.isSelected():
+            painter.setPen(QPen(QColor("#00ffff"), 0.25))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(_rounded_rect_path(self._rect(1.0), self.pad.shape, self.pad.corner_radius_percent))
 
         _draw_fitted_text(painter, self.pad.number, self._rect(), QColor("#ffffff"))
 

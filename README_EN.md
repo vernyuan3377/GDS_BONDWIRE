@@ -13,6 +13,10 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
 - Read GDSII files and identify chip pads and names using configurable `CB Drawing` and `AP Pin`
   layers.
 - Adjust chip position, chip rotation, and PCB footprint rotation.
+- Draw manual PCB pads in the BondWire workspace with arbitrary numbers, sizes, rotations, and
+  shapes.
+- Move manual pads directly on the canvas and align or distribute them left/right/top/bottom and
+  horizontally/vertically.
 - Keep chip pad labels upright while the chip rotates.
 - Create BondWires by clicking chip pads, external labels, or PCB pads.
 - Double-click non-pad areas to create free connection endpoints.
@@ -23,6 +27,7 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
 - Calculate true wire length using adaptive integration of the 3D quadratic Bezier curve.
 - Save and open `.bondwire.json` projects.
 - Export landscape A3 PDF drawings with optional chip pad labels.
+- Export an AD26 footprint-reference DelphiScript with an embedded pad coordinate table.
 
 ## Installation
 
@@ -55,10 +60,13 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 2. Verify the GDS layer mapping. Defaults are `CB Drawing = 76/0`, `AP Pin = 126/0`, and search
    depth `10`.
 3. Adjust chip placement, chip rotation, and PCB footprint rotation.
-4. Switch to BondWire drawing mode and click the chip and PCB endpoints.
-5. Drag wire endpoints to fine-tune landing positions.
-6. Open the 3D view and adjust the wire midpoint, loop height, or target length.
-7. Save the project and export the PDF drawing.
+4. If you need a custom reference footprint, add manual pads in the footprint drawing controls,
+   then drag, align, or distribute them on the canvas.
+5. Switch to BondWire drawing mode and click the chip and PCB endpoints.
+6. Drag wire endpoints to fine-tune landing positions.
+7. Open the 3D view and adjust the wire midpoint, loop height, or target length.
+8. Save the project and export the PDF drawing. Export the AD26 footprint-reference script when
+   needed.
 
 ## Recognition Notes
 
@@ -76,3 +84,23 @@ rotation, and every BondWire connection.
 ```powershell
 python -m pytest -q
 ```
+
+## Build a Portable Windows Application
+
+Run in Windows PowerShell:
+
+```powershell
+.\build_windows.ps1
+```
+
+The output is created in `dist\GDS_BondWire`. Copy the entire folder to another 64-bit Windows
+computer and run `GDS_BondWire.exe`; Python does not need to be installed.
+
+To build a single executable instead:
+
+```powershell
+.\build_windows.ps1 -OneFile
+```
+
+The single-file output is `dist\GDS_BondWire.exe`, but it usually starts more slowly than the
+folder build.

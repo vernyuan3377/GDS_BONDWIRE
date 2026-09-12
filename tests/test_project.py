@@ -1,4 +1,4 @@
-from bondwire_app.models import Bond, ProjectData
+from bondwire_app.models import BoardPad, Bond, ProjectData
 
 
 def test_project_round_trip():
@@ -13,6 +13,18 @@ def test_project_round_trip():
         bondwire_color="#00aa55",
         bondwire_width_mil=0.42,
         pdf_include_chip_pad_labels=False,
+        manual_board_pads=[
+            BoardPad(
+                number="M1",
+                x_mil=10.0,
+                y_mil=-5.0,
+                width_mil=8.0,
+                height_mil=4.0,
+                rotation_deg=90.0,
+                shape="rect",
+                manual=True,
+            )
+        ],
         bonds=[
             Bond(
                 "VDD",

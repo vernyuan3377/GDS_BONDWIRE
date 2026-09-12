@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
+    QComboBox,
     QColorDialog,
     QDoubleSpinBox,
     QFileDialog,
@@ -22,6 +23,7 @@ from PyQt5.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -47,7 +49,7 @@ from .graphics import (
     FreeEndpointMarkerItem,
 )
 from .loaders import load_gds, load_pcblib
-from .models import BoardData, Bond, ChipData, ProjectData
+from .models import BoardData, BoardPad, Bond, ChipData, ProjectData
 from .simulation import (
     bond_midpoint,
     bond_control_point,
@@ -175,6 +177,7 @@ class MainWindow(QMainWindow):
             ("适合窗口", self.fit_scene),
             ("删除打线", self.delete_selected_bonds),
             ("导出 PDF", self.choose_export_pdf),
+            ("导出 AD26 脚本", self.choose_export_ad26_script),
         ]
         for name, callback in actions:
             action = QAction(name, self)
@@ -264,6 +267,57 @@ class MainWindow(QMainWindow):
         self.pcb_rotation.valueChanged.connect(self.apply_pcb_transform)
         pcb_transform_form.addRow("旋转角度", self.pcb_rotation)
         controls_layout.addWidget(pcb_transform_group)
+
+        footprint_group = QGroupBox("封装绘制（手工 PCB PAD）")
+        footprint_layout = QVBoxLayout(footprint_group)
+        footprint_form = QFormLayout()
+        self.manual_pad_number = QLineEdit("1")
+        self.manual_pad_width = self._double_spin(0.01, 100000, 20.0, 3)
+        self.manual_pad_height = self._double_spin(0.01, 100000, 8.0, 3)
+        self.manual_pad_rotation = self._double_spin(-360, 360, 0.0, 2)
+        self.manual_pad_shape = QComboBox()
+        self.manual_pad_shape.addItems(["roundrect", "rect", "round", "octagon"])
+        for box in (self.manual_pad_width, self.manual_pad_height):
+            box.setSuffix(" mil")
+            box.setSingleStep(1.0)
+        self.manual_pad_rotation.setSuffix(" deg")
+        footprint_form.addRow("编号", self.manual_pad_number)
+        footprint_form.addRow("宽度", self.manual_pad_width)
+        footprint_form.addRow("高度", self.manual_pad_height)
+        footprint_form.addRow("旋转", self.manual_pad_rotation)
+        footprint_form.addRow("形状", self.manual_pad_shape)
+        footprint_layout.addLayout(footprint_form)
+
+        manual_button_row = QHBoxLayout()
+        add_pad_button = QPushButton("添加 PAD")
+        add_pad_button.clicked.connect(self.add_manual_pad_from_controls)
+        delete_pad_button = QPushButton("删除手工 PAD")
+        delete_pad_button.clicked.connect(self.delete_selected_manual_pads)
+        manual_button_row.addWidget(add_pad_button)
+        manual_button_row.addWidget(delete_pad_button)
+        footprint_layout.addLayout(manual_button_row)
+
+        align_row = QHBoxLayout()
+        for name, mode in (
+            ("左对齐", "left"),
+            ("右对齐", "right"),
+            ("上对齐", "top"),
+            ("下对齐", "bottom"),
+        ):
+            button = QPushButton(name)
+            button.clicked.connect(lambda _checked=False, current=mode: self.align_selected_manual_pads(current))
+            align_row.addWidget(button)
+        footprint_layout.addLayout(align_row)
+
+        distribute_row = QHBoxLayout()
+        distribute_x = QPushButton("水平等距")
+        distribute_y = QPushButton("垂直等距")
+        distribute_x.clicked.connect(lambda: self.distribute_selected_manual_pads("x"))
+        distribute_y.clicked.connect(lambda: self.distribute_selected_manual_pads("y"))
+        distribute_row.addWidget(distribute_x)
+        distribute_row.addWidget(distribute_y)
+        footprint_layout.addLayout(distribute_row)
+        controls_layout.addWidget(footprint_group)
 
         wire_group = QGroupBox("打线样式与 PDF")
         wire_form = QFormLayout(wire_group)
@@ -416,15 +470,11 @@ class MainWindow(QMainWindow):
             self.board_preview_item = BoardNativePreviewItem(board.preview_svg, board.preview_bbox_mil)
             self.board_preview_item.setParentItem(self.board_assembly_item)
         for pad in board.pads:
-            item = BoardPadItem(pad, native_rendered=self.board_preview_item is not None)
-            item.setParentItem(self.board_assembly_item)
-            self.board_items[pad.number] = item
+            self._add_board_pad_item(pad, native_rendered=self.board_preview_item is not None)
+        self._render_manual_board_pads()
         self.apply_pcb_transform()
         self.pcb_label.setText(Path(board.path).name)
-        self.pcb_info.setText(
-            f"{board.footprint_name}，识别 {len(board.pads)} 个 PAD、"
-            f"{board.native_primitive_count} 个原始封装图元；金属层：{', '.join(board.metal_layers) or '无'}"
-        )
+        self._update_pcb_info()
         self.clear_bonds()
         self.fit_scene()
 
@@ -440,6 +490,185 @@ class MainWindow(QMainWindow):
         if self.board_assembly_item is None:
             return local
         return self.board_assembly_item.mapToScene(local)
+
+    def _ensure_board_container(self) -> None:
+        if self.board is None:
+            self.board = BoardData(path="", footprint_name="Manual_Footprint")
+            self.pcb_label.setText("手工封装")
+        if self.board_assembly_item is None:
+            self.board_assembly_item = BoardAssemblyItem()
+            self.scene.addItem(self.board_assembly_item)
+            self.apply_pcb_transform()
+
+    def _add_board_pad_item(self, pad: BoardPad, native_rendered: bool = False) -> BoardPadItem:
+        self._ensure_board_container()
+        item = BoardPadItem(
+            pad,
+            native_rendered=native_rendered and not pad.manual,
+            changed=self.manual_board_pad_changed if pad.manual else None,
+        )
+        item.setParentItem(self.board_assembly_item)
+        self.board_items[pad.number] = item
+        return item
+
+    def _render_manual_board_pads(self) -> None:
+        self._ensure_board_container()
+        for pad in self.project.manual_board_pads:
+            pad.manual = True
+            if pad.number not in self.board_items:
+                self._add_board_pad_item(pad, native_rendered=False)
+        self._sync_manual_board_pads()
+
+    def _sync_manual_board_pads(self) -> None:
+        manual_pads = [
+            item.pad
+            for item in self.board_items.values()
+            if item.pad.manual
+        ]
+        self.project.manual_board_pads = manual_pads
+        if self.board is not None:
+            imported = [pad for pad in self.board.pads if not pad.manual]
+            self.board.pads = imported + manual_pads
+
+    def _update_pcb_info(self) -> None:
+        if not self.board:
+            self.pcb_info.setText("-")
+            return
+        manual_count = len(self.project.manual_board_pads)
+        imported_count = max(0, len(self.board.pads) - manual_count)
+        self.pcb_info.setText(
+            f"{self.board.footprint_name}，识别 {imported_count} 个封装 PAD、"
+            f"手工 {manual_count} 个 PAD、{self.board.native_primitive_count} 个原始封装图元；"
+            f"金属层：{', '.join(self.board.metal_layers) or '无'}"
+        )
+
+    def _next_manual_pad_number(self) -> str:
+        numbers = []
+        for name in self.board_items:
+            try:
+                numbers.append(int(name))
+            except ValueError:
+                continue
+        return str(max(numbers, default=0) + 1)
+
+    def _selected_manual_pad_items(self) -> list[BoardPadItem]:
+        seen: set[int] = set()
+        selected: list[BoardPadItem] = []
+        for item in self.scene.selectedItems():
+            current = item
+            while current is not None:
+                if isinstance(current, BoardPadItem) and current.pad.manual:
+                    item_id = id(current)
+                    if item_id not in seen:
+                        seen.add(item_id)
+                        selected.append(current)
+                    break
+                current = current.parentItem()
+        return selected
+
+    def manual_board_pad_changed(self, _item: BoardPadItem) -> None:
+        self._sync_manual_board_pads()
+        self.update_bond_items()
+        self._update_pcb_info()
+
+    def add_manual_pad_from_controls(self) -> None:
+        number = self.manual_pad_number.text().strip()
+        if not number:
+            self.statusBar().showMessage("请输入 PAD 编号。")
+            return
+        if number in self.board_items:
+            self.statusBar().showMessage(f"PAD {number} 已存在，请换一个编号。")
+            return
+        self._ensure_board_container()
+        scene_pos = self.view.mapToScene(self.view.viewport().rect().center())
+        local_pos = (
+            self.board_assembly_item.mapFromScene(scene_pos)
+            if self.board_assembly_item is not None
+            else scene_pos
+        )
+        pad = BoardPad(
+            number=number,
+            x_mil=local_pos.x(),
+            y_mil=local_pos.y(),
+            width_mil=self.manual_pad_width.value(),
+            height_mil=self.manual_pad_height.value(),
+            rotation_deg=self.manual_pad_rotation.value(),
+            shape=self.manual_pad_shape.currentText(),
+            corner_radius_percent=50.0,
+            manual=True,
+        )
+        self.project.manual_board_pads.append(pad)
+        self._add_board_pad_item(pad)
+        self._sync_manual_board_pads()
+        self._update_pcb_info()
+        self.manual_pad_number.setText(self._next_manual_pad_number())
+        self.statusBar().showMessage(f"已添加手工 PCB PAD {number}，可在移动模式下拖动它。")
+
+    def delete_selected_manual_pads(self) -> None:
+        selected = self._selected_manual_pad_items()
+        if not selected:
+            self.statusBar().showMessage("请先选择需要删除的手工 PAD。")
+            return
+        deleted = {item.pad.number for item in selected}
+        for item in selected:
+            self.scene.removeItem(item)
+            self.board_items.pop(item.pad.number, None)
+        self.project.bonds = [
+            bond
+            for bond in self.project.bonds
+            if not (bond.board_endpoint_type == "pad" and bond.board_pad in deleted)
+        ]
+        self._sync_manual_board_pads()
+        self._update_pcb_info()
+        self.rebuild_bonds()
+        self.statusBar().showMessage(f"已删除 {len(deleted)} 个手工 PAD，并移除相关 BondWire。")
+
+    def align_selected_manual_pads(self, mode: str) -> None:
+        selected = self._selected_manual_pad_items()
+        if len(selected) < 2:
+            self.statusBar().showMessage("请至少选择 2 个手工 PAD 再执行对齐。")
+            return
+        if mode == "left":
+            target = min(item.pad.x_mil - item.pad.width_mil / 2 for item in selected)
+            for item in selected:
+                item.pad.x_mil = target + item.pad.width_mil / 2
+        elif mode == "right":
+            target = max(item.pad.x_mil + item.pad.width_mil / 2 for item in selected)
+            for item in selected:
+                item.pad.x_mil = target - item.pad.width_mil / 2
+        elif mode == "top":
+            target = min(item.pad.y_mil - item.pad.height_mil / 2 for item in selected)
+            for item in selected:
+                item.pad.y_mil = target + item.pad.height_mil / 2
+        elif mode == "bottom":
+            target = max(item.pad.y_mil + item.pad.height_mil / 2 for item in selected)
+            for item in selected:
+                item.pad.y_mil = target - item.pad.height_mil / 2
+        else:
+            return
+        for item in selected:
+            item.sync_from_pad()
+        self._sync_manual_board_pads()
+        self.update_bond_items()
+        self.statusBar().showMessage(f"已对齐 {len(selected)} 个手工 PAD。")
+
+    def distribute_selected_manual_pads(self, axis: str) -> None:
+        selected = self._selected_manual_pad_items()
+        if len(selected) < 3:
+            self.statusBar().showMessage("请至少选择 3 个手工 PAD 再执行等距分布。")
+            return
+        attr = "x_mil" if axis == "x" else "y_mil"
+        selected.sort(key=lambda item: getattr(item.pad, attr))
+        first = getattr(selected[0].pad, attr)
+        last = getattr(selected[-1].pad, attr)
+        spacing = (last - first) / (len(selected) - 1)
+        for index, item in enumerate(selected):
+            setattr(item.pad, attr, first + spacing * index)
+            item.sync_from_pad()
+        self._sync_manual_board_pads()
+        self.update_bond_items()
+        direction = "水平" if axis == "x" else "垂直"
+        self.statusBar().showMessage(f"已{direction}等距分布 {len(selected)} 个手工 PAD。")
 
     def load_gds_file(self, path: str) -> None:
         try:
@@ -933,9 +1162,21 @@ class MainWindow(QMainWindow):
             self.ap_layer.setValue(data.ap_layer)
             self.ap_texttype.setValue(data.ap_texttype)
             self.search_depth.setValue(data.search_depth)
-            self.load_pcblib_file(data.pcb_path)
-            self.load_gds_file(data.gds_path)
+            if data.pcb_path:
+                self.load_pcblib_file(data.pcb_path)
+            if data.gds_path:
+                self.load_gds_file(data.gds_path)
             self.project = data
+            if not data.pcb_path:
+                if self.board_assembly_item:
+                    self.scene.removeItem(self.board_assembly_item)
+                self.board = None
+                self.board_preview_item = None
+                self.board_assembly_item = None
+                self.board_items.clear()
+                self._ensure_board_container()
+            self._render_manual_board_pads()
+            self._update_pcb_info()
             self.wire_width.blockSignals(True)
             self.wire_width.setValue(data.bondwire_width_mil)
             self.wire_width.blockSignals(False)
@@ -962,6 +1203,90 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "导出打线 PDF", default, "PDF (*.pdf)")
         if path:
             self.export_pdf(path)
+
+    def choose_export_ad26_script(self) -> None:
+        default = str(Path(self.project_path).with_suffix(".pas")) if self.project_path else "ad26_footprint_reference.pas"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出 AD26 封装参考脚本",
+            default,
+            "Altium DelphiScript (*.pas);;Text (*.txt)",
+        )
+        if path:
+            self.export_ad26_script(path)
+
+    def export_ad26_script(self, path: str) -> None:
+        if not self.board_items:
+            raise ValueError("导出 AD26 参考封装前请先导入或绘制 PCB PAD。")
+        pads = sorted(
+            (item.pad for item in self.board_items.values()),
+            key=lambda pad: (0, int(pad.number)) if pad.number.isdigit() else (1, pad.number),
+        )
+        footprint_name = self.board.footprint_name if self.board else "GDS_BONDWIRE_REF"
+        lines = [
+            "{ Generated by GDS BondWire Planner. }",
+            "{ Run this script from an Altium Designer 26 PCB Library document as a pad-placement reference. }",
+            "{ Coordinates and sizes are in mil; layer is TopLayer by default. }",
+            "",
+            "Procedure Create_GDS_BondWire_Reference_Footprint;",
+            "Var",
+            "    Board     : IPCB_Board;",
+            "    Component : IPCB_Component;",
+            "    Pad       : IPCB_Pad;",
+            "Begin",
+            "    Board := PCBServer.GetCurrentPCBBoard;",
+            "    If Board = Nil Then Exit;",
+            "    PCBServer.PreProcess;",
+            "    Component := PCBServer.PCBObjectFactory(eComponentObject, eNoDimension, eCreate_Default);",
+            f"    Component.Name.Text := '{footprint_name}_BONDWIRE_REF';",
+            "    Board.AddPCBObject(Component);",
+            "",
+        ]
+        for pad in pads:
+            shape = {
+                "round": "eRounded",
+                "roundrect": "eRoundedRectangle",
+                "rect": "eRectangular",
+                "octagon": "eOctagonal",
+            }.get(pad.shape, "eRoundedRectangle")
+            lines.extend(
+                [
+                    f"    {{ PAD {pad.number} }}",
+                    "    Pad := PCBServer.PCBObjectFactory(ePadObject, eNoDimension, eCreate_Default);",
+                    f"    Pad.Name := '{pad.number}';",
+                    f"    Pad.X := MilsToCoord({pad.x_mil:.6f});",
+                    f"    Pad.Y := MilsToCoord({-pad.y_mil:.6f});",
+                    f"    Pad.TopXSize := MilsToCoord({pad.width_mil:.6f});",
+                    f"    Pad.TopYSize := MilsToCoord({pad.height_mil:.6f});",
+                    f"    Pad.Rotation := {pad.rotation_deg:.6f};",
+                    f"    Pad.TopShape := {shape};",
+                    "    Pad.Layer := eTopLayer;",
+                    "    Component.AddPCBObject(Pad);",
+                    "",
+                ]
+            )
+        lines.extend(
+            [
+                "    Board.ViewManager_FullUpdate;",
+                "    PCBServer.PostProcess;",
+                "End;",
+                "",
+                "Begin",
+                "    Create_GDS_BondWire_Reference_Footprint;",
+                "End.",
+                "",
+                "{ PAD_TABLE_CSV",
+                "number,x_mil,y_mil,width_mil,height_mil,rotation_deg,shape,manual",
+            ]
+        )
+        for pad in pads:
+            lines.append(
+                f"{pad.number},{pad.x_mil:.6f},{pad.y_mil:.6f},{pad.width_mil:.6f},"
+                f"{pad.height_mil:.6f},{pad.rotation_deg:.6f},{pad.shape},{int(pad.manual)}"
+            )
+        lines.append("}")
+        Path(path).write_text("\n".join(lines), encoding="utf-8")
+        self.statusBar().showMessage(f"AD26 封装参考脚本已导出：{path}")
 
     def export_pdf(self, path: str) -> None:
         if not self.board or not self.chip:
