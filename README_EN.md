@@ -16,7 +16,7 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
 - Draw manual PCB pads in the BondWire workspace with arbitrary numbers, positions, sizes,
   rotations, shapes, and colors.
 - Move manual pads directly on the canvas, edit coordinates in mil or mm, and align or distribute
-  them left/right/top/bottom and horizontally/vertically.
+  them left/right/top/bottom and horizontally/vertically using automatic or fixed spacing.
 - Keep chip pad labels upright while the chip rotates.
 - Create BondWires by clicking chip pads, external labels, or PCB pads.
 - Double-click non-pad areas to create free connection endpoints.

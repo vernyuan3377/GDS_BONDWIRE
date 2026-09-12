@@ -321,10 +321,15 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
     centers = [window.board_items[name].pad.x_mil for name in ("M1", "M2", "M3")]
     assert centers == [0.0, 45.0, 90.0]
 
+    window.manual_pad_spacing.setValue(20.0)
+    window.distribute_selected_manual_pads("x")
+    centers = [window.board_items[name].pad.x_mil for name in ("M1", "M2", "M3")]
+    assert centers == [0.0, 20.0, 40.0]
+
     window.export_ad26_script(str(script_path))
     script = script_path.read_text(encoding="utf-8")
     assert "Pad.Name := 'M1'" in script
-    assert "M3,90.000000" in script
+    assert "M3,40.000000" in script
 
     window.save_project(str(project_path))
     restored = MainWindow()
@@ -371,6 +376,8 @@ def test_manual_pad_position_color_and_mm_controls_update_selection():
     assert item.pad.x_mil == pytest.approx(5.0 * mil_per_mm)
     assert item.pad.y_mil == pytest.approx(6.0 * mil_per_mm)
     assert item.pad.fill_color == "#0000ff"
+    window.manual_pad_spacing.setValue(0.5)
+    assert window._display_to_mil(window.manual_pad_spacing.value()) == pytest.approx(0.5 * mil_per_mm)
 
     window.close()
     app.processEvents()

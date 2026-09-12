@@ -287,13 +287,20 @@ class MainWindow(QMainWindow):
         self.manual_pad_y = self._double_spin(-100000, 100000, 0.0, 4)
         self.manual_pad_width = self._double_spin(0.01, 100000, 20.0, 3)
         self.manual_pad_height = self._double_spin(0.01, 100000, 8.0, 3)
+        self.manual_pad_spacing = self._double_spin(0.0, 100000, 0.0, 3)
         self.manual_pad_rotation = self._double_spin(-360, 360, 0.0, 2)
         self.manual_pad_shape = QComboBox()
         self.manual_pad_shape.addItems(["roundrect", "rect", "round", "octagon"])
         self.manual_pad_color_button = QPushButton()
         self.manual_pad_color_button.clicked.connect(self.choose_manual_pad_color)
         self._update_manual_pad_color_button()
-        for box in (self.manual_pad_x, self.manual_pad_y, self.manual_pad_width, self.manual_pad_height):
+        for box in (
+            self.manual_pad_x,
+            self.manual_pad_y,
+            self.manual_pad_width,
+            self.manual_pad_height,
+            self.manual_pad_spacing,
+        ):
             box.setSingleStep(1.0)
         self.manual_pad_rotation.setSuffix(" deg")
         footprint_form.addRow("编号", self.manual_pad_number)
@@ -302,6 +309,7 @@ class MainWindow(QMainWindow):
         footprint_form.addRow("Y", self.manual_pad_y)
         footprint_form.addRow("宽度", self.manual_pad_width)
         footprint_form.addRow("高度", self.manual_pad_height)
+        footprint_form.addRow("等距间距（0=自动）", self.manual_pad_spacing)
         footprint_form.addRow("旋转", self.manual_pad_rotation)
         footprint_form.addRow("形状", self.manual_pad_shape)
         footprint_form.addRow("颜色", self.manual_pad_color_button)
@@ -488,11 +496,13 @@ class MainWindow(QMainWindow):
             box.setRange(-100000 / scale, 100000 / scale)
             box.setSingleStep(step)
             box.setSuffix(f" {unit}")
-        for box in (self.manual_pad_width, self.manual_pad_height):
+        for box in (self.manual_pad_width, self.manual_pad_height, self.manual_pad_spacing):
             box.setDecimals(decimals)
-            box.setRange(0.01 / scale, 100000 / scale)
+            box.setRange(0.0, 100000 / scale)
             box.setSingleStep(step)
             box.setSuffix(f" {unit}")
+        self.manual_pad_width.setMinimum(0.01 / scale)
+        self.manual_pad_height.setMinimum(0.01 / scale)
 
     def change_manual_pad_unit(self, unit: str) -> None:
         if unit == self.manual_pad_unit_name:
@@ -503,6 +513,7 @@ class MainWindow(QMainWindow):
             self.manual_pad_y: self._display_to_mil(self.manual_pad_y.value(), old_unit),
             self.manual_pad_width: self._display_to_mil(self.manual_pad_width.value(), old_unit),
             self.manual_pad_height: self._display_to_mil(self.manual_pad_height.value(), old_unit),
+            self.manual_pad_spacing: self._display_to_mil(self.manual_pad_spacing.value(), old_unit),
         }
         self.manual_pad_unit_name = unit
         self._update_manual_pad_unit_suffixes()
@@ -814,15 +825,20 @@ class MainWindow(QMainWindow):
         attr = "x_mil" if axis == "x" else "y_mil"
         selected.sort(key=lambda item: getattr(item.pad, attr))
         first = getattr(selected[0].pad, attr)
-        last = getattr(selected[-1].pad, attr)
-        spacing = (last - first) / (len(selected) - 1)
+        spacing = self._display_to_mil(self.manual_pad_spacing.value())
+        if spacing <= 0:
+            last = getattr(selected[-1].pad, attr)
+            spacing = (last - first) / (len(selected) - 1)
         for index, item in enumerate(selected):
             setattr(item.pad, attr, first + spacing * index)
             item.sync_from_pad()
         self._sync_manual_board_pads()
         self.update_bond_items()
         direction = "水平" if axis == "x" else "垂直"
-        self.statusBar().showMessage(f"已{direction}等距分布 {len(selected)} 个手工 PAD。")
+        spacing_text = self._mil_to_display(spacing)
+        self.statusBar().showMessage(
+            f"已{direction}等距分布 {len(selected)} 个手工 PAD，间距 {spacing_text:.4g} {self.manual_pad_unit_name}。"
+        )
 
     def load_gds_file(self, path: str) -> None:
         try:
