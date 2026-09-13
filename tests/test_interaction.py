@@ -344,6 +344,9 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
     assert "PCBServer.PreProcess" not in script
     assert "PCBObjectFactory(eComponentObject" not in script
     assert "\nBegin\n    Create_GDS_BondWire_Reference_Footprint;" not in script
+    assert "Board.ViewManager_FullUpdate" not in script
+    assert "Pads added to the active footprint" not in script
+    assert "    Exit;\nEnd;" in script
     assert "Additional Options > Pad Numbers" in script
     assert "M3,40.000000" in script
 
