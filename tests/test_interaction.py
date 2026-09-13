@@ -328,20 +328,20 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
 
     window.export_ad26_script(str(script_path))
     script = script_path.read_text(encoding="utf-8")
-    assert "CurrentLib : IPCB_Library;" in script
-    assert "Board      : IPCB_Board;" in script
-    assert "Component  : IPCB_LibComponent;" in script
-    assert "CurrentLib := PCBServer.GetCurrentPCBLibrary;" in script
+    assert "CurrentLib" not in script
+    assert "IPCB_LibComponent" not in script
+    assert "Board : IPCB_Board;" in script
     assert "Board := PCBServer.GetCurrentPCBBoard;" in script
     assert "If Not Board.IsLibrary Then" in script
-    assert "Component := CurrentLib.CurrentComponent;" in script
     assert "PCBServer.CreatePCBLibComp" not in script
-    assert "CurrentLib.RegisterComponent" not in script
     assert "Pad.Name := 'M1'" in script
-    assert "Component.AddPCBObject(Pad);" in script
-    assert script.count("PCBM_BoardRegisteration") == 3
-    assert "Try\n" in script
-    assert "Finally\n        PCBServer.PostProcess;" in script
+    assert "Pad.Mode := ePadMode_Simple;" in script
+    assert "Pad.HoleSize := MilsToCoord(0);" in script
+    assert "Board.AddPCBObject(Pad);" in script
+    assert "Component.AddPCBObject(Pad);" not in script
+    assert "SendMessageToRobots" not in script
+    assert "I_ObjectAddress" not in script
+    assert "PCBServer.PreProcess" not in script
     assert "PCBObjectFactory(eComponentObject" not in script
     assert "\nBegin\n    Create_GDS_BondWire_Reference_Footprint;" not in script
     assert "Additional Options > Pad Numbers" in script
