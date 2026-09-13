@@ -82,7 +82,7 @@ class Bond3DView(QWidget):
                     (*self._scene_xy(main.board_preview_item, QPointF(rect.left(), rect.bottom())), z),
                 ]
             )
-        if main.chip_item is not None:
+        if main.chip_item is not None and main.project.chip_visible:
             rect = main.chip_item._chip_rect()
             z = main.project.chip_surface_z_mil
             result.extend(
@@ -232,14 +232,15 @@ class Bond3DView(QWidget):
                 QColor("#5d9fc4"),
             )
             self._draw_board_metal(painter)
-        if len(corners) >= 8:
+        if len(corners) >= 8 and self.dialog.main_window.project.chip_visible:
             self._draw_polygon(
                 painter,
                 [self._project(point) for point in corners[4:8]],
                 QColor(90, 70, 35, 210),
                 QColor("#e7bd4a"),
             )
-        self._draw_chip_pads(painter)
+        if self.dialog.main_window.project.chip_visible:
+            self._draw_chip_pads(painter)
 
         main = self.dialog.main_window
         for index, bond in enumerate(main.project.bonds):
@@ -298,6 +299,7 @@ class Bond3DView(QWidget):
             control = self._project(self.dialog.main_window._bond_middle_point_3d(bond))
             if math.hypot(event.pos().x() - control.x(), event.pos().y() - control.y()) <= 14:
                 self._mode = "control_z" if event.modifiers() & Qt.ShiftModifier else "control_xy"
+                self.dialog.main_window.begin_undo_transaction("拖动 3D BondWire 中间点")
                 return
         best_index = None
         best_distance = 12.0
@@ -340,6 +342,8 @@ class Bond3DView(QWidget):
         self.dialog.set_middle_point(control[0] + dx, control[1] + dy, control[2])
 
     def mouseReleaseEvent(self, _event) -> None:
+        if self._mode in {"control_xy", "control_z"}:
+            self.dialog.main_window.finish_undo_transaction()
         self._last_pos = None
         self._mode = ""
 
@@ -460,7 +464,9 @@ class Bond3DDialog(QDialog):
         if bond is None:
             return
         start, end = self.main_window._bond_endpoints_3d(bond)
-        self.main_window._set_bond_middle_point_3d(bond, (x, y, max(z, start[2], end[2])))
+        target = (x, y, max(z, start[2], end[2]))
+        self.main_window.record_undo_state("编辑 3D BondWire")
+        self.main_window._set_bond_middle_point_3d(bond, target)
         self._sync_bond_controls()
         self.main_window.update_bond_items(refresh_3d=False)
         self.view.update()
@@ -479,6 +485,9 @@ class Bond3DDialog(QDialog):
         bond = self.selected_bond()
         if bond is None:
             return
+        if bond.wire_diameter_um == value:
+            return
+        self.main_window.record_undo_state("修改 BondWire 线径")
         bond.wire_diameter_um = value
         self.view.update()
 
@@ -514,6 +523,12 @@ class Bond3DDialog(QDialog):
     def _surface_z_changed(self, _value: float) -> None:
         if self._syncing:
             return
+        if (
+            self.main_window.project.pcb_surface_z_mil == self.pcb_z.value()
+            and self.main_window.project.chip_surface_z_mil == self.chip_z.value()
+        ):
+            return
+        self.main_window.record_undo_state("修改 3D 表面高度")
         self.main_window.project.pcb_surface_z_mil = self.pcb_z.value()
         self.main_window.project.chip_surface_z_mil = self.chip_z.value()
         self._sync_bond_controls()
@@ -524,6 +539,9 @@ class Bond3DDialog(QDialog):
         bond = self.selected_bond()
         if bond is None:
             return
+        if bond.control_x_mil is None and bond.control_y_mil is None and bond.control_z_mil is None:
+            return
+        self.main_window.record_undo_state("重置 3D BondWire 中间点")
         bond.control_x_mil = None
         bond.control_y_mil = None
         bond.control_z_mil = None

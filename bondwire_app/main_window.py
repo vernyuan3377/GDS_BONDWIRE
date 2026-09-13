@@ -66,10 +66,21 @@ MIL_PER_MM = 1000.0 / 25.4
 
 
 class CanvasView(QGraphicsView):
-    def __init__(self, scene: QGraphicsScene, click_handler, double_click_handler):
+    def __init__(
+        self,
+        scene: QGraphicsScene,
+        click_handler,
+        double_click_handler,
+        drag_started=None,
+        drag_finished=None,
+        drag_cancelled=None,
+    ):
         super().__init__(scene)
         self.click_handler = click_handler
         self.double_click_handler = double_click_handler
+        self.drag_started = drag_started
+        self.drag_finished = drag_finished
+        self.drag_cancelled = drag_cancelled
         self.wire_mode = False
         self.endpoint_press_pos: QPoint | None = None
         self.endpoint_drag_item: BondEndpointHandle | None = None
@@ -96,6 +107,8 @@ class CanvasView(QGraphicsView):
                     self.endpoint_press_pos = event.pos()
                     self.endpoint_drag_item = current
                     self.endpoint_was_dragged = False
+                    if self.drag_started:
+                        self.drag_started("调整 BondWire 端点")
                     event.accept()
                     return
                 current = current.parentItem()
@@ -125,6 +138,10 @@ class CanvasView(QGraphicsView):
             self.endpoint_press_pos = None
             self.endpoint_drag_item = None
             self.endpoint_was_dragged = False
+            if was_dragged and self.drag_finished:
+                self.drag_finished()
+            elif not was_dragged and self.drag_cancelled:
+                self.drag_cancelled()
             event.accept()
             return
         super().mouseReleaseEvent(event)
@@ -165,10 +182,20 @@ class MainWindow(QMainWindow):
         self.manual_pad_unit_name = "mil"
         self.manual_pad_color = "#ff1010"
         self.three_d_dialog: Bond3DDialog | None = None
+        self._undo_stack: list[tuple[str, dict]] = []
+        self._undo_transaction: tuple[str, dict] | None = None
+        self._restoring_undo = False
 
         self.scene = QGraphicsScene(self)
         self.scene.selectionChanged.connect(self.sync_manual_pad_controls_from_selection)
-        self.view = CanvasView(self.scene, self.handle_canvas_click, self.handle_canvas_double_click)
+        self.view = CanvasView(
+            self.scene,
+            self.handle_canvas_click,
+            self.handle_canvas_double_click,
+            self.begin_undo_transaction,
+            self.finish_undo_transaction,
+            self.cancel_undo_transaction,
+        )
         self.pad_editor_dialog = ManualPadEditorDialog(self)
         self._bind_manual_pad_editor_controls()
         self._build_ui()
@@ -180,6 +207,14 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("主工具栏", self)
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
+
+        self.undo_action = QAction("撤销", self)
+        self.undo_action.setShortcut(QKeySequence.Undo)
+        self.undo_action.setShortcutContext(Qt.ApplicationShortcut)
+        self.undo_action.setEnabled(False)
+        self.undo_action.triggered.connect(self.undo_last_action)
+        toolbar.addAction(self.undo_action)
+        toolbar.addSeparator()
 
         actions = [
             ("打开 PcbLib", self.choose_pcblib),
@@ -203,6 +238,12 @@ class MainWindow(QMainWindow):
         action = QAction("3D 视图", self)
         action.triggered.connect(self.show_3d_view)
         toolbar.addAction(action)
+
+        self.chip_visibility_action = QAction("显示芯片", self)
+        self.chip_visibility_action.setCheckable(True)
+        self.chip_visibility_action.setChecked(self.project.chip_visible)
+        self.chip_visibility_action.toggled.connect(self.set_chip_visible)
+        toolbar.addAction(self.chip_visibility_action)
 
         toolbar.addSeparator()
         self.move_action = QAction("移动芯片", self)
@@ -411,6 +452,106 @@ class MainWindow(QMainWindow):
         self.scene.addLine(-3, 0, 3, 0, pen).setZValue(1)
         self.scene.addLine(0, -3, 0, 3, pen).setZValue(1)
 
+    def _undo_snapshot(self) -> dict:
+        return self.project.to_dict()
+
+    def _update_undo_action(self) -> None:
+        if not hasattr(self, "undo_action"):
+            return
+        self.undo_action.setEnabled(bool(self._undo_stack))
+        self.undo_action.setText(
+            f"撤销 {self._undo_stack[-1][0]}" if self._undo_stack else "撤销"
+        )
+
+    def record_undo_state(self, description: str) -> None:
+        if self._restoring_undo or self._undo_transaction is not None:
+            return
+        self._undo_stack.append((description, self._undo_snapshot()))
+        self._undo_stack = self._undo_stack[-100:]
+        self._update_undo_action()
+
+    def begin_undo_transaction(self, description: str) -> None:
+        if self._restoring_undo or self._undo_transaction is not None:
+            return
+        self._undo_transaction = (description, self._undo_snapshot())
+
+    def finish_undo_transaction(self) -> None:
+        if self._undo_transaction is None:
+            return
+        description, snapshot = self._undo_transaction
+        self._undo_transaction = None
+        if snapshot != self._undo_snapshot():
+            self._undo_stack.append((description, snapshot))
+            self._undo_stack = self._undo_stack[-100:]
+            self._update_undo_action()
+
+    def cancel_undo_transaction(self) -> None:
+        self._undo_transaction = None
+
+    def clear_undo_history(self) -> None:
+        self._undo_stack.clear()
+        self._undo_transaction = None
+        self._update_undo_action()
+
+    def undo_last_action(self) -> None:
+        if not self._undo_stack:
+            self.statusBar().showMessage("没有可以撤销的操作。")
+            return
+        description, snapshot = self._undo_stack.pop()
+        self._restore_undo_snapshot(snapshot)
+        self._update_undo_action()
+        self.statusBar().showMessage(f"已撤销：{description}")
+
+    def _restore_undo_snapshot(self, snapshot: dict) -> None:
+        self._restoring_undo = True
+        try:
+            self.project = ProjectData.from_dict(snapshot)
+            for name, item in list(self.board_items.items()):
+                if item.pad.manual:
+                    self.scene.removeItem(item)
+                    self.board_items.pop(name, None)
+            if self.board is not None:
+                self.board.pads = [pad for pad in self.board.pads if not pad.manual]
+            if self.project.manual_board_pads:
+                self._render_manual_board_pads()
+            elif not self.project.pcb_path and self.board_assembly_item is not None:
+                self.scene.removeItem(self.board_assembly_item)
+                self.board = None
+                self.board_preview_item = None
+                self.board_assembly_item = None
+                self.board_items.clear()
+                self.pcb_label.setText("未加载")
+
+            for box, value in (
+                (self.chip_x, self.project.chip_x_mil),
+                (self.chip_y, self.project.chip_y_mil),
+                (self.chip_rotation, self.project.chip_rotation_deg),
+                (self.pcb_rotation, self.project.pcb_rotation_deg),
+                (self.wire_width, self.project.bondwire_width_mil),
+            ):
+                box.blockSignals(True)
+                box.setValue(value)
+                box.blockSignals(False)
+            self.pdf_include_labels.blockSignals(True)
+            self.pdf_include_labels.setChecked(self.project.pdf_include_chip_pad_labels)
+            self.pdf_include_labels.blockSignals(False)
+            self.chip_visibility_action.blockSignals(True)
+            self.chip_visibility_action.setChecked(self.project.chip_visible)
+            self.chip_visibility_action.blockSignals(False)
+            if self.chip_item is not None:
+                self.chip_item.setPos(self.project.chip_x_mil, -self.project.chip_y_mil)
+                self.chip_item.setRotation(self.project.chip_rotation_deg)
+                self.chip_item.setVisible(self.project.chip_visible)
+            if self.board_assembly_item is not None:
+                self.board_assembly_item.setRotation(self.project.pcb_rotation_deg)
+            self._update_wire_color_button()
+            self._update_pcb_info()
+            self._set_pending_endpoint(None)
+            self.rebuild_bonds()
+            self.sync_manual_pad_controls_from_selection()
+        finally:
+            self._restoring_undo = False
+
     def set_mode(self, wire_mode: bool) -> None:
         self.view.wire_mode = wire_mode
         self.wire_action.setChecked(wire_mode)
@@ -426,10 +567,23 @@ class MainWindow(QMainWindow):
             else "移动模式：拖动芯片，滚轮缩放。"
         )
 
+    def set_chip_visible(self, visible: bool) -> None:
+        if visible == self.project.chip_visible:
+            return
+        self.record_undo_state("显示芯片" if visible else "隐藏芯片")
+        self.project.chip_visible = visible
+        if self.chip_item is not None:
+            self.chip_item.setVisible(visible)
+        self._refresh_3d_dialog()
+        self.statusBar().showMessage("芯片已显示。" if visible else "芯片已隐藏，BondWire 数据保持不变。")
+
     def choose_wire_color(self) -> None:
         color = QColorDialog.getColor(QColor(self.project.bondwire_color), self, "选择 BondWire 颜色")
         if not color.isValid():
             return
+        if color.name() == self.project.bondwire_color:
+            return
+        self.record_undo_state("修改 BondWire 颜色")
         self.project.bondwire_color = color.name()
         self._update_wire_color_button()
         self.apply_wire_style()
@@ -444,6 +598,8 @@ class MainWindow(QMainWindow):
         )
 
     def apply_wire_style(self) -> None:
+        if self.wire_width.value() != self.project.bondwire_width_mil:
+            self.record_undo_state("修改 BondWire 粗细")
         self.project.bondwire_width_mil = self.wire_width.value()
         for item in self.bond_items:
             item.set_style(self.project.bondwire_color, self.project.bondwire_width_mil)
@@ -524,6 +680,7 @@ class MainWindow(QMainWindow):
         self._update_manual_pad_color_button()
         selected = self._selected_manual_pad_items()
         if selected and self.pad_editor_dialog.mode() == "edit":
+            self.record_undo_state("修改 PAD 颜色")
             for item in selected:
                 item.pad.fill_color = self.manual_pad_color
                 item.update()
@@ -588,10 +745,13 @@ class MainWindow(QMainWindow):
         self.pcb_label.setText(Path(board.path).name)
         self._update_pcb_info()
         self.clear_bonds()
+        self.clear_undo_history()
         self.fit_scene()
 
     def apply_pcb_transform(self) -> None:
         rotation = self.pcb_rotation.value()
+        if rotation != self.project.pcb_rotation_deg:
+            self.record_undo_state("旋转 PCB 封装")
         self.project.pcb_rotation_deg = rotation
         if self.board_assembly_item is not None:
             self.board_assembly_item.setRotation(rotation)
@@ -610,7 +770,7 @@ class MainWindow(QMainWindow):
         if self.board_assembly_item is None:
             self.board_assembly_item = BoardAssemblyItem()
             self.scene.addItem(self.board_assembly_item)
-            self.apply_pcb_transform()
+            self.board_assembly_item.setRotation(self.project.pcb_rotation_deg)
 
     def _add_board_pad_item(self, pad: BoardPad, native_rendered: bool = False) -> BoardPadItem:
         self._ensure_board_container()
@@ -618,6 +778,8 @@ class MainWindow(QMainWindow):
             pad,
             native_rendered=native_rendered and not pad.manual,
             changed=self.manual_board_pad_changed if pad.manual else None,
+            edit_started=self.begin_undo_transaction if pad.manual else None,
+            edit_finished=self.finish_undo_transaction if pad.manual else None,
         )
         item.setParentItem(self.board_assembly_item)
         self.board_items[pad.number] = item
@@ -747,6 +909,7 @@ class MainWindow(QMainWindow):
         if conflicts:
             self.statusBar().showMessage(f"PAD {sorted(conflicts)[0]} 已存在，请修改起始编号或 ΔPAD。")
             return
+        self.record_undo_state("编辑 PAD")
         old_to_new = {
             item.pad.number: target
             for item, target in zip(selected, target_numbers)
@@ -813,6 +976,7 @@ class MainWindow(QMainWindow):
             if self.manual_pad_delta_y_enabled.isChecked()
             else 0.0
         )
+        self.record_undo_state("生成 PAD")
         self._ensure_board_container()
         self.scene.clearSelection()
         for index, number in enumerate(numbers):
@@ -842,6 +1006,7 @@ class MainWindow(QMainWindow):
         if not selected:
             self.statusBar().showMessage("请先选择需要删除的手工 PAD。")
             return
+        self.record_undo_state("删除 PAD")
         deleted = {item.pad.number for item in selected}
         for item in selected:
             self.scene.removeItem(item)
@@ -861,6 +1026,7 @@ class MainWindow(QMainWindow):
         if len(selected) < 2:
             self.statusBar().showMessage("请至少选择 2 个手工 PAD 再执行对齐。")
             return
+        self.record_undo_state("对齐 PAD")
         if mode == "left":
             target = min(item.pad.x_mil - item.pad.width_mil / 2 for item in selected)
             for item in selected:
@@ -890,6 +1056,7 @@ class MainWindow(QMainWindow):
         if len(selected) < 3:
             self.statusBar().showMessage("请至少选择 3 个手工 PAD 再执行等距分布。")
             return
+        self.record_undo_state("等距分布 PAD")
         attr = "x_mil" if axis == "x" else "y_mil"
         selected.sort(key=lambda item: getattr(item.pad, attr))
         first = getattr(selected[0].pad, attr)
@@ -930,8 +1097,14 @@ class MainWindow(QMainWindow):
         self.project.ap_layer = chip.ap_layer
         self.project.ap_texttype = chip.ap_texttype
         self.project.search_depth = chip.search_depth
-        self.chip_item = ChipItem(chip, self.chip_transform_changed)
+        self.chip_item = ChipItem(
+            chip,
+            self.chip_transform_changed,
+            self.begin_undo_transaction,
+            self.finish_undo_transaction,
+        )
         self.scene.addItem(self.chip_item)
+        self.chip_item.setVisible(self.project.chip_visible)
         self.chip_item.set_interactive(not self.view.wire_mode)
         self.apply_transform_controls()
         self.gds_label.setText(Path(chip.path).name)
@@ -939,6 +1112,7 @@ class MainWindow(QMainWindow):
             f"{chip.cell_name}，深度 {chip.search_depth} 识别 {len(chip.pads)} 个命名 CB Drawing PAD"
         )
         self.clear_bonds()
+        self.clear_undo_history()
         self.fit_scene()
 
     def reload_gds(self) -> None:
@@ -951,6 +1125,12 @@ class MainWindow(QMainWindow):
         x_value = self.chip_x.value()
         y_value = self.chip_y.value()
         rotation_value = self.chip_rotation.value()
+        if (
+            x_value != self.project.chip_x_mil
+            or y_value != self.project.chip_y_mil
+            or rotation_value != self.project.chip_rotation_deg
+        ):
+            self.record_undo_state("变换芯片")
         self.updating_transform = True
         self.chip_item.setPos(x_value, -y_value)
         self.chip_item.setRotation(rotation_value)
@@ -1153,6 +1333,7 @@ class MainWindow(QMainWindow):
         if bond in self.project.bonds:
             self.statusBar().showMessage("该 BondWire 已存在。")
             return
+        self.record_undo_state("添加 BondWire")
         self.project.bonds.append(bond)
         self.rebuild_bonds()
         self.statusBar().showMessage(
@@ -1352,12 +1533,15 @@ class MainWindow(QMainWindow):
         if not rows:
             self.statusBar().showMessage("请先在画布中点击 BondWire，或在打线关系表中选择需要删除的行。")
             return
+        self.record_undo_state("删除 BondWire")
         self.project.bonds = [bond for index, bond in enumerate(self.project.bonds) if index not in rows]
         self.rebuild_bonds()
         self.statusBar().showMessage(f"已删除 {len(rows)} 条 BondWire。")
 
     def clear_bonds(self) -> None:
         self._set_pending_endpoint(None)
+        if self.project.bonds:
+            self.record_undo_state("清空 BondWire")
         self.project.bonds.clear()
         self.rebuild_bonds()
 
@@ -1405,6 +1589,11 @@ class MainWindow(QMainWindow):
             if data.gds_path:
                 self.load_gds_file(data.gds_path)
             self.project = data
+            self.chip_visibility_action.blockSignals(True)
+            self.chip_visibility_action.setChecked(data.chip_visible)
+            self.chip_visibility_action.blockSignals(False)
+            if self.chip_item is not None:
+                self.chip_item.setVisible(data.chip_visible)
             if not data.pcb_path:
                 if self.board_assembly_item:
                     self.scene.removeItem(self.board_assembly_item)
@@ -1433,6 +1622,7 @@ class MainWindow(QMainWindow):
             self.apply_pcb_transform()
             self.rebuild_bonds()
             self.project_path = path
+            self.clear_undo_history()
         except Exception as exc:
             self._show_error("工程打开失败", exc)
 

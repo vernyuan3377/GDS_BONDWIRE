@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtCore import QEvent, QPoint, QPointF, QRectF, Qt
-from PyQt5.QtGui import QMouseEvent
+from PyQt5.QtGui import QKeySequence, QMouseEvent
 from PyQt5.QtTest import QTest
 from PyQt5.QtWidgets import QApplication, QGraphicsItem, QGraphicsView
 
@@ -448,6 +448,105 @@ def test_batch_pad_edit_preserves_and_refreshes_bondwire_relationship():
     assert window.bond_items[0].board_handle.scenePos() == window.board_items["P10"].scenePos()
     assert window.board_items["P09"].pad.x_mil == pytest.approx(115.0)
 
+    window.close()
+    app.processEvents()
+
+
+def test_ctrl_z_undoes_pad_generation_and_bondwire_edits():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    assert window.undo_action.shortcut() == QKeySequence.Undo
+
+    window.load_gds_file("DATA/GDS/Z_BIAS_TOP_ALL.gds")
+    window.pad_editor_dialog.set_mode("generate")
+    window.manual_pad_number.setText("U1")
+    window.add_manual_pad_from_controls()
+    assert "U1" in window.board_items
+    assert window.undo_action.isEnabled()
+
+    window.add_bond("NGNDA", "U1")
+    assert len(window.project.bonds) == 1
+    window.undo_action.trigger()
+    assert window.project.bonds == []
+    assert "U1" in window.board_items
+
+    window.undo_action.trigger()
+    assert "U1" not in window.board_items
+    assert window.project.manual_board_pads == []
+    assert not window.undo_action.isEnabled()
+    window.close()
+    app.processEvents()
+
+
+def test_undo_restores_pad_drag_and_bondwire_endpoint():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.load_gds_file("DATA/GDS/Z_BIAS_TOP_ALL.gds")
+    window.manual_pad_number.setText("U1")
+    window.add_manual_pad_from_controls()
+    window.add_bond("NGNDA", "U1")
+    window.clear_undo_history()
+
+    pad = window.board_items["U1"]
+    window.begin_undo_transaction("移动 PAD U1")
+    pad.setPos(QPointF(40.0, 25.0))
+    window.finish_undo_transaction()
+    assert pad.scenePos() == QPointF(40.0, 25.0)
+    window.undo_last_action()
+    assert window.board_items["U1"].scenePos() == QPointF(0.0, 0.0)
+    assert window.bond_items[0].board_handle.scenePos() == QPointF(0.0, 0.0)
+
+    bond = window.project.bonds[0]
+    original_offset = bond.board_offset_x_mil
+    window.begin_undo_transaction("调整 BondWire 端点")
+    window.bond_items[0].board_handle.setPos(QPointF(8.0, 0.0))
+    window.finish_undo_transaction()
+    assert bond.board_offset_x_mil != original_offset
+    window.undo_last_action()
+    assert window.project.bonds[0].board_offset_x_mil == original_offset
+    window.close()
+    app.processEvents()
+
+
+def test_chip_can_be_hidden_without_losing_bonds_and_visibility_is_undoable(tmp_path):
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.load_gds_file("DATA/GDS/Z_BIAS_TOP_ALL.gds")
+    window.manual_pad_number.setText("V1")
+    window.add_manual_pad_from_controls()
+    window.add_bond("NGNDA", "V1")
+    window.clear_undo_history()
+
+    window.chip_visibility_action.setChecked(False)
+    assert not window.project.chip_visible
+    assert not window.chip_item.isVisible()
+    assert len(window.project.bonds) == 1
+    assert len(window.bond_items) == 1
+
+    window.undo_last_action()
+    assert window.project.chip_visible
+    assert window.chip_visibility_action.isChecked()
+    assert window.chip_item.isVisible()
+    assert len(window.project.bonds) == 1
+
+    window.clear_undo_history()
+    window.chip_x.setValue(12.0)
+    assert window.project.chip_x_mil == 12.0
+    window.undo_last_action()
+    assert window.project.chip_x_mil == 0.0
+    assert window.chip_item.pos().x() == 0.0
+
+    window.chip_visibility_action.setChecked(False)
+    project_path = tmp_path / "hidden-chip.bondwire.json"
+    window.save_project(str(project_path))
+    restored = MainWindow()
+    restored.open_project(str(project_path))
+    assert not restored.project.chip_visible
+    assert not restored.chip_visibility_action.isChecked()
+    assert not restored.chip_item.isVisible()
+    assert len(restored.project.bonds) == 1
+
+    restored.close()
     window.close()
     app.processEvents()
 

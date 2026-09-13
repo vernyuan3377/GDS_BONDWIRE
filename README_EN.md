@@ -19,7 +19,10 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
   `delta Y` steps in mil or mm.
 - Move manual pads directly on the canvas and align or distribute them left/right/top/bottom and
   horizontally/vertically using automatic or fixed spacing.
+- Use global `Ctrl+Z` to undo pad and BondWire edits, chip/PCB transforms, 3D parameters, and chip
+  visibility, even while the PAD editor or 3D window has focus.
 - Keep chip pad labels upright while the chip rotates.
+- Hide or show the chip geometry, pads, and labels from the toolbar without removing BondWire data.
 - Create BondWires by clicking chip pads, external labels, or PCB pads.
 - Double-click non-pad areas to create free connection endpoints.
 - Drag BondWire endpoints to fine-tune landing positions.

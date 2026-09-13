@@ -88,11 +88,15 @@ class BoardPadItem(QGraphicsObject):
         pad: BoardPad,
         native_rendered: bool = False,
         changed: Callable[["BoardPadItem"], None] | None = None,
+        edit_started: Callable[[str], None] | None = None,
+        edit_finished: Callable[[], None] | None = None,
     ):
         super().__init__()
         self.pad = pad
         self.native_rendered = native_rendered
         self.changed = changed
+        self.edit_started = edit_started
+        self.edit_finished = edit_finished
         self.pending = False
         self.hovered = False
         self.setPos(pad.x_mil, pad.y_mil)
@@ -142,6 +146,16 @@ class BoardPadItem(QGraphicsObject):
         self.hovered = False
         self.update()
         super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if self.pad.manual and event.button() == Qt.LeftButton and self.edit_started:
+            self.edit_started(f"移动 PAD {self.pad.number}")
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        if self.pad.manual and event.button() == Qt.LeftButton and self.edit_finished:
+            self.edit_finished()
 
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value):
         result = super().itemChange(change, value)
@@ -331,10 +345,18 @@ class ChipPadLabelItem(QGraphicsObject):
 
 
 class ChipItem(QGraphicsObject):
-    def __init__(self, chip: ChipData, changed: Callable[[], None] | None = None):
+    def __init__(
+        self,
+        chip: ChipData,
+        changed: Callable[[], None] | None = None,
+        edit_started: Callable[[str], None] | None = None,
+        edit_finished: Callable[[], None] | None = None,
+    ):
         super().__init__()
         self.chip = chip
         self.changed = changed
+        self.edit_started = edit_started
+        self.edit_finished = edit_finished
         (x0, y0), (x1, y1) = chip.bbox_um
         self.center_um = ((x0 + x1) / 2, (y0 + y1) / 2)
         self.pad_local: dict[str, QPointF] = {}
@@ -535,6 +557,16 @@ class ChipItem(QGraphicsObject):
             painter.setPen(QPen(QColor("#ff4d6d"), 0.25))
             painter.setBrush(Qt.NoBrush)
             painter.drawRect(outline.adjusted(-0.3, -0.3, 0.3, 0.3))
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton and self.edit_started:
+            self.edit_started("移动芯片")
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.LeftButton and self.edit_finished:
+            self.edit_finished()
 
     def itemChange(self, change: QGraphicsItem.GraphicsItemChange, value):
         result = super().itemChange(change, value)

@@ -92,6 +92,7 @@ class ProjectData:
     chip_x_mil: float = 0.0
     chip_y_mil: float = 0.0
     chip_rotation_deg: float = 0.0
+    chip_visible: bool = True
     pcb_rotation_deg: float = 0.0
     pcb_surface_z_mil: float = 0.0
     chip_surface_z_mil: float = 5.0
