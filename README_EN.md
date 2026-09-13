@@ -82,11 +82,12 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 ### Running the Footprint Script in Altium Designer 26
 
 1. Export a new `.pas` file from the application; previously exported scripts are not updated.
-2. Create or open a `.PcbLib` in AD26 and make that document active.
+2. Create or open a `.PcbLib` in AD26, then create or select the target footprint in the PCB
+   Library panel so it is the active footprint.
 3. Add the `.pas` file to a Script Project and run `Create_GDS_BondWire_Reference_Footprint`.
-4. The script creates pads with Designators in the current PCB Library. If their numbers are not
-   visible, enable `View Configuration > Additional Options > Pad Numbers` and zoom in. Do not run
-   it from a `.PcbDoc` or an inactive `.PcbLib` document.
+4. The script adds pads with Designators to the active footprint; it does not create a new footprint.
+   If their numbers are not visible, enable `View Configuration > Additional Options > Pad Numbers`
+   and zoom in. Do not run the script on a `.PcbDoc` or an inactive `.PcbLib`.
 
 ## Recognition Notes
 

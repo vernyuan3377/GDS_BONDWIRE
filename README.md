@@ -69,9 +69,9 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 ### 在 Altium Designer 26 中运行封装脚本
 
 1. 在软件中导出新的 `.pas` 文件（旧脚本不会自动更新）。
-2. 在 AD26 中新建或打开 `.PcbLib`，并使它成为当前活动文档。
+2. 在 AD26 中新建或打开 `.PcbLib`，在 PCB Library 面板中新建或选中要填充的 Footprint，并使它成为当前活动封装。
 3. 将 `.pas` 加入 Script Project 后，运行 `Create_GDS_BondWire_Reference_Footprint`。
-4. 脚本会在当前 PCB Library 中创建带 Designator 的 PAD。如果视图中看不到编号，请在 `View Configuration > Additional Options` 中启用 `Pad Numbers`，并适当放大视图。请不要在 `.PcbDoc` 或未激活的 `.PcbLib` 上运行脚本。
+4. 脚本会向当前 Footprint 添加带 Designator 的 PAD，不会自动新建 Footprint。如果视图中看不到编号，请在 `View Configuration > Additional Options` 中启用 `Pad Numbers`，并适当放大视图。请不要在 `.PcbDoc` 或未激活的 `.PcbLib` 上运行脚本。
 
 ## 识别说明
 

@@ -334,16 +334,16 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
     assert "CurrentLib := PCBServer.GetCurrentPCBLibrary;" in script
     assert "Board := PCBServer.GetCurrentPCBBoard;" in script
     assert "If Not Board.IsLibrary Then" in script
-    assert "Component := PCBServer.CreatePCBLibComp;" in script
-    assert "CurrentLib.GetUniqueCompName" in script
-    assert "If Not CurrentLib.RegisterComponent(Component) Then" in script
+    assert "Component := CurrentLib.CurrentComponent;" in script
+    assert "PCBServer.CreatePCBLibComp" not in script
+    assert "CurrentLib.RegisterComponent" not in script
     assert "Pad.Name := 'M1'" in script
     assert "Component.AddPCBObject(Pad);" in script
-    assert script.count("PCBM_BoardRegisteration") == 1
+    assert script.count("PCBM_BoardRegisteration") == 3
     assert "Try\n" in script
     assert "Finally\n        PCBServer.PostProcess;" in script
-    assert script.index("PCBServer.PostProcess;") < script.index("CurrentLib.CurrentComponent := Component;")
     assert "PCBObjectFactory(eComponentObject" not in script
+    assert "\nBegin\n    Create_GDS_BondWire_Reference_Footprint;" not in script
     assert "Additional Options > Pad Numbers" in script
     assert "M3,40.000000" in script
 
