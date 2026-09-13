@@ -329,13 +329,20 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
     window.export_ad26_script(str(script_path))
     script = script_path.read_text(encoding="utf-8")
     assert "CurrentLib : IPCB_Library;" in script
+    assert "Board      : IPCB_Board;" in script
     assert "Component  : IPCB_LibComponent;" in script
     assert "CurrentLib := PCBServer.GetCurrentPCBLibrary;" in script
+    assert "Board := PCBServer.GetCurrentPCBBoard;" in script
+    assert "If Not Board.IsLibrary Then" in script
     assert "Component := PCBServer.CreatePCBLibComp;" in script
-    assert "CurrentLib.RegisterComponent(Component);" in script
+    assert "CurrentLib.GetUniqueCompName" in script
+    assert "If Not CurrentLib.RegisterComponent(Component) Then" in script
     assert "Pad.Name := 'M1'" in script
     assert "Component.AddPCBObject(Pad);" in script
-    assert "PCBM_BoardRegisteration" in script
+    assert script.count("PCBM_BoardRegisteration") == 1
+    assert "Try\n" in script
+    assert "Finally\n        PCBServer.PostProcess;" in script
+    assert script.index("PCBServer.PostProcess;") < script.index("CurrentLib.CurrentComponent := Component;")
     assert "PCBObjectFactory(eComponentObject" not in script
     assert "Additional Options > Pad Numbers" in script
     assert "M3,40.000000" in script

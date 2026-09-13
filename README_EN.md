@@ -85,7 +85,8 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 2. Create or open a `.PcbLib` in AD26 and make that document active.
 3. Add the `.pas` file to a Script Project and run `Create_GDS_BondWire_Reference_Footprint`.
 4. The script creates pads with Designators in the current PCB Library. If their numbers are not
-   visible, enable `View Configuration > Additional Options > Pad Numbers` and zoom in.
+   visible, enable `View Configuration > Additional Options > Pad Numbers` and zoom in. Do not run
+   it from a `.PcbDoc` or an inactive `.PcbLib` document.
 
 ## Recognition Notes
 
