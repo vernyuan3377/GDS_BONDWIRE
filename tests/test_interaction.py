@@ -383,6 +383,75 @@ def test_manual_pad_position_color_and_mm_controls_update_selection():
     app.processEvents()
 
 
+def test_pad_editor_generates_signed_number_and_xy_steps():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    editor = window.pad_editor_dialog
+
+    window.show_manual_pad_editor("generate")
+    assert editor.isVisible()
+    assert editor.mode() == "generate"
+    assert editor.generate_button.isEnabled()
+    assert not editor.update_button.isEnabled()
+
+    window.manual_pad_number.setText("PAD03")
+    window.manual_pad_count.setValue(3)
+    window.manual_pad_delta_number_enabled.setChecked(True)
+    window.manual_pad_delta_number.setValue(-1)
+    window.manual_pad_delta_x_enabled.setChecked(True)
+    window.manual_pad_delta_x.setValue(12.5)
+    window.manual_pad_delta_y_enabled.setChecked(True)
+    window.manual_pad_delta_y.setValue(-4.0)
+    window.add_manual_pad_from_controls()
+
+    assert set(window.board_items) == {"PAD03", "PAD02", "PAD01"}
+    assert window.board_items["PAD03"].pad.x_mil == pytest.approx(0.0)
+    assert window.board_items["PAD02"].pad.x_mil == pytest.approx(12.5)
+    assert window.board_items["PAD01"].pad.x_mil == pytest.approx(25.0)
+    assert window.board_items["PAD01"].pad.y_mil == pytest.approx(-8.0)
+
+    editor.close()
+    window.close()
+    app.processEvents()
+
+
+def test_batch_pad_edit_preserves_and_refreshes_bondwire_relationship():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.load_gds_file("DATA/GDS/Z_BIAS_TOP_ALL.gds")
+
+    window.pad_editor_dialog.set_mode("generate")
+    window.manual_pad_number.setText("P1")
+    window.manual_pad_count.setValue(2)
+    window.manual_pad_delta_number_enabled.setChecked(True)
+    window.manual_pad_delta_number.setValue(1)
+    window.manual_pad_delta_x_enabled.setChecked(True)
+    window.manual_pad_delta_x.setValue(20.0)
+    window.add_manual_pad_from_controls()
+    window.add_bond("NGNDA", "P1")
+
+    window.pad_editor_dialog.set_mode("edit")
+    window.scene.clearSelection()
+    window.board_items["P1"].setSelected(True)
+    window.board_items["P2"].setSelected(True)
+    window.manual_pad_number.setText("P10")
+    window.manual_pad_delta_number_enabled.setChecked(True)
+    window.manual_pad_delta_number.setValue(-1)
+    window.manual_pad_x.setValue(100.0)
+    window.manual_pad_delta_x_enabled.setChecked(True)
+    window.manual_pad_delta_x.setValue(15.0)
+    window.apply_manual_pad_controls_to_selection()
+
+    assert set(window.board_items) == {"P10", "P09"}
+    assert window.project.bonds[0].board_pad == "P10"
+    assert window.table.item(0, 2).text() == "P10"
+    assert window.bond_items[0].board_handle.scenePos() == window.board_items["P10"].scenePos()
+    assert window.board_items["P09"].pad.x_mil == pytest.approx(115.0)
+
+    window.close()
+    app.processEvents()
+
+
 def test_manual_pad_bounding_rect_covers_selection_outline():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()

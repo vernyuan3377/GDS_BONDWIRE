@@ -13,10 +13,12 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
 - Read GDSII files and identify chip pads and names using configurable `CB Drawing` and `AP Pin`
   layers.
 - Adjust chip position, chip rotation, and PCB footprint rotation.
-- Draw manual PCB pads in the BondWire workspace with arbitrary numbers, positions, sizes,
-  rotations, shapes, and colors.
-- Move manual pads directly on the canvas, edit coordinates in mil or mm, and align or distribute
-  them left/right/top/bottom and horizontally/vertically using automatic or fixed spacing.
+- Draw manual pads in a separate PCB PAD generator/editor window with arbitrary numbers,
+  positions, sizes, rotations, shapes, and colors.
+- Batch generation and multi-pad editing support optional signed `delta PAD`, `delta X`, and
+  `delta Y` steps in mil or mm.
+- Move manual pads directly on the canvas and align or distribute them left/right/top/bottom and
+  horizontally/vertically using automatic or fixed spacing.
 - Keep chip pad labels upright while the chip rotates.
 - Create BondWires by clicking chip pads, external labels, or PCB pads.
 - Double-click non-pad areas to create free connection endpoints.
@@ -60,12 +62,14 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 2. Verify the GDS layer mapping. Defaults are `CB Drawing = 76/0`, `AP Pin = 126/0`, and search
    depth `10`.
 3. Adjust chip placement, chip rotation, and PCB footprint rotation.
-4. If you need a custom reference footprint, add manual pads in the footprint drawing controls,
-   enter coordinates and sizes in mil or mm, then drag, align, or distribute them on the canvas.
-5. Switch to BondWire drawing mode and click the chip and PCB endpoints.
-6. Drag wire endpoints to fine-tune landing positions.
-7. Open the 3D view and adjust the wire midpoint, loop height, or target length.
-8. Save the project and export the PDF drawing. Export the AD26 footprint-reference script when
+4. For a custom reference footprint, open the separate PAD editor, set the count, and optionally
+   enable signed `delta PAD`, `delta X`, and `delta Y` steps. A negative `delta PAD` decrements IDs.
+5. Use Edit Selected PAD to modify, drag, align, or distribute manual pads. Switching to BondWire
+   mode preserves existing pad-to-wire relationships.
+6. Switch to BondWire drawing mode and click the chip and PCB endpoints.
+7. Drag wire endpoints to fine-tune landing positions.
+8. Open the 3D view and adjust the wire midpoint, loop height, or target length.
+9. Save the project and export the PDF drawing. Export the AD26 footprint-reference script when
    needed.
 
 ## Recognition Notes
