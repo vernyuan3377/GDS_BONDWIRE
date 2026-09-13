@@ -66,6 +66,13 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 8. 打开“3D 视图”，调整打线中间点、高度或目标长度。
 9. 保存工程并导出 PDF，必要时导出 AD26 封装参考脚本。
 
+### 在 Altium Designer 26 中运行封装脚本
+
+1. 在软件中导出新的 `.pas` 文件（旧脚本不会自动更新）。
+2. 在 AD26 中新建或打开 `.PcbLib`，并使它成为当前活动文档。
+3. 将 `.pas` 加入 Script Project 后，运行 `Create_GDS_BondWire_Reference_Footprint`。
+4. 脚本会在当前 PCB Library 中创建带 Designator 的 PAD。如果视图中看不到编号，请在 `View Configuration > Additional Options` 中启用 `Pad Numbers`，并适当放大视图。
+
 ## 识别说明
 
 GDSII 通常只保存 layer/datatype 数字，不保存 Virtuoso 层名称，因此软件允许手动配置

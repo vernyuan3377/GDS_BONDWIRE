@@ -79,6 +79,14 @@ python run.py --pcb your.PcbLib --gds your.gds --export-pdf drawing.pdf
 9. Save the project and export the PDF drawing. Export the AD26 footprint-reference script when
    needed.
 
+### Running the Footprint Script in Altium Designer 26
+
+1. Export a new `.pas` file from the application; previously exported scripts are not updated.
+2. Create or open a `.PcbLib` in AD26 and make that document active.
+3. Add the `.pas` file to a Script Project and run `Create_GDS_BondWire_Reference_Footprint`.
+4. The script creates pads with Designators in the current PCB Library. If their numbers are not
+   visible, enable `View Configuration > Additional Options > Pad Numbers` and zoom in.
+
 ## Recognition Notes
 
 GDSII usually stores numeric layer/datatype values instead of Virtuoso layer names. The application

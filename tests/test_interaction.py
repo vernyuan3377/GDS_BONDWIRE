@@ -328,7 +328,16 @@ def test_manual_board_pads_can_be_added_moved_aligned_distributed_and_exported(t
 
     window.export_ad26_script(str(script_path))
     script = script_path.read_text(encoding="utf-8")
+    assert "CurrentLib : IPCB_Library;" in script
+    assert "Component  : IPCB_LibComponent;" in script
+    assert "CurrentLib := PCBServer.GetCurrentPCBLibrary;" in script
+    assert "Component := PCBServer.CreatePCBLibComp;" in script
+    assert "CurrentLib.RegisterComponent(Component);" in script
     assert "Pad.Name := 'M1'" in script
+    assert "Component.AddPCBObject(Pad);" in script
+    assert "PCBM_BoardRegisteration" in script
+    assert "PCBObjectFactory(eComponentObject" not in script
+    assert "Additional Options > Pad Numbers" in script
     assert "M3,40.000000" in script
 
     window.save_project(str(project_path))
