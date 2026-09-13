@@ -415,6 +415,40 @@ def test_pad_editor_generates_signed_number_and_xy_steps():
     app.processEvents()
 
 
+def test_single_pad_button_ignores_batch_count_and_advances_enabled_steps():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    editor = window.pad_editor_dialog
+    editor.set_mode("generate")
+
+    window.manual_pad_number.setText("S05")
+    window.manual_pad_count.setValue(20)
+    window.manual_pad_x.setValue(10.0)
+    window.manual_pad_y.setValue(30.0)
+    window.manual_pad_delta_number_enabled.setChecked(True)
+    window.manual_pad_delta_number.setValue(-1)
+    window.manual_pad_delta_x_enabled.setChecked(True)
+    window.manual_pad_delta_x.setValue(2.5)
+    window.manual_pad_delta_y_enabled.setChecked(True)
+    window.manual_pad_delta_y.setValue(-3.0)
+
+    editor.single_generate_button.click()
+    assert set(window.board_items) == {"S05"}
+    assert window.board_items["S05"].pad.x_mil == pytest.approx(10.0)
+    assert window.board_items["S05"].pad.y_mil == pytest.approx(30.0)
+    assert window.manual_pad_number.text() == "S04"
+    assert window.manual_pad_x.value() == pytest.approx(12.5)
+    assert window.manual_pad_y.value() == pytest.approx(27.0)
+
+    editor.single_generate_button.click()
+    assert set(window.board_items) == {"S05", "S04"}
+    assert window.board_items["S04"].pad.x_mil == pytest.approx(12.5)
+    assert window.board_items["S04"].pad.y_mil == pytest.approx(27.0)
+
+    window.close()
+    app.processEvents()
+
+
 def test_batch_pad_edit_preserves_and_refreshes_bondwire_relationship():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()

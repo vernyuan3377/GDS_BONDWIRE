@@ -102,11 +102,16 @@ class ManualPadEditorDialog(QDialog):
         step_form.addRow(delta_y_row)
         layout.addWidget(step_group)
 
+        generation_row = QHBoxLayout()
+        self.single_generate_button = QPushButton("生成单个 PAD")
+        self.generate_button = QPushButton("批量生成 PAD")
+        generation_row.addWidget(self.single_generate_button)
+        generation_row.addWidget(self.generate_button)
+        layout.addLayout(generation_row)
+
         action_row = QHBoxLayout()
-        self.generate_button = QPushButton("生成 PAD")
         self.update_button = QPushButton("更新所选 PAD")
         self.delete_button = QPushButton("删除所选 PAD")
-        action_row.addWidget(self.generate_button)
         action_row.addWidget(self.update_button)
         action_row.addWidget(self.delete_button)
         layout.addLayout(action_row)
@@ -146,6 +151,7 @@ class ManualPadEditorDialog(QDialog):
 
         self.pad_unit.currentTextChanged.connect(main_window.change_manual_pad_unit)
         self.pad_color_button.clicked.connect(main_window.choose_manual_pad_color)
+        self.single_generate_button.clicked.connect(main_window.add_single_manual_pad_from_controls)
         self.generate_button.clicked.connect(main_window.add_manual_pad_from_controls)
         self.update_button.clicked.connect(main_window.apply_manual_pad_controls_to_selection)
         self.delete_button.clicked.connect(main_window.delete_selected_manual_pads)
@@ -178,6 +184,7 @@ class ManualPadEditorDialog(QDialog):
     def _update_mode(self, _index: int | None = None) -> None:
         generating = self.mode() == "generate"
         self.pad_count.setEnabled(generating)
+        self.single_generate_button.setEnabled(generating)
         self.generate_button.setEnabled(generating)
         self.update_button.setEnabled(not generating)
         self.delete_button.setEnabled(not generating)

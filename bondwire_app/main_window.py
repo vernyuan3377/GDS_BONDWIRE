@@ -951,32 +951,72 @@ class MainWindow(QMainWindow):
         self.sync_manual_pad_controls_from_selection()
         self.statusBar().showMessage(f"已更新 {len(selected)} 个手工 PAD。")
 
+    def add_single_manual_pad_from_controls(self) -> None:
+        base_number = self.manual_pad_number.text().strip()
+        numbers = self._create_manual_pads_from_controls(
+            1,
+            use_steps=False,
+            description="生成单个 PAD",
+        )
+        if not numbers:
+            return
+        if self.manual_pad_delta_number_enabled.isChecked():
+            next_number = self._stepped_pad_number(
+                base_number,
+                self.manual_pad_delta_number.value(),
+                1,
+            )
+            if next_number is not None:
+                self.manual_pad_number.setText(next_number)
+        if self.manual_pad_delta_x_enabled.isChecked():
+            self.manual_pad_x.setValue(
+                self.manual_pad_x.value() + self.manual_pad_delta_x.value()
+            )
+        if self.manual_pad_delta_y_enabled.isChecked():
+            self.manual_pad_y.setValue(
+                self.manual_pad_y.value() + self.manual_pad_delta_y.value()
+            )
+        self.statusBar().showMessage(
+            f"已生成单个 PCB PAD {numbers[0]}；参数已按启用的 Δ 值前进到下一项。"
+        )
+
     def add_manual_pad_from_controls(self) -> None:
+        self._create_manual_pads_from_controls(
+            self.manual_pad_count.value(),
+            use_steps=True,
+            description="批量生成 PAD",
+        )
+
+    def _create_manual_pads_from_controls(
+        self,
+        count: int,
+        use_steps: bool,
+        description: str,
+    ) -> list[str]:
         base_number = self.manual_pad_number.text().strip()
         if not base_number:
             self.statusBar().showMessage("请输入 PAD 编号。")
-            return
-        count = self.manual_pad_count.value()
+            return []
         numbers = self._target_pad_numbers(base_number, count)
         if numbers is None:
-            return
+            return []
         conflicts = set(numbers).intersection(self.board_items)
         if conflicts:
             self.statusBar().showMessage(f"PAD {sorted(conflicts)[0]} 已存在，请修改起始编号或 ΔPAD。")
-            return
+            return []
         start_x = self._display_to_mil(self.manual_pad_x.value())
         start_y = self._display_to_mil(self.manual_pad_y.value())
         delta_x = (
             self._display_to_mil(self.manual_pad_delta_x.value())
-            if self.manual_pad_delta_x_enabled.isChecked()
+            if use_steps and self.manual_pad_delta_x_enabled.isChecked()
             else 0.0
         )
         delta_y = (
             self._display_to_mil(self.manual_pad_delta_y.value())
-            if self.manual_pad_delta_y_enabled.isChecked()
+            if use_steps and self.manual_pad_delta_y_enabled.isChecked()
             else 0.0
         )
-        self.record_undo_state("生成 PAD")
+        self.record_undo_state(description)
         self._ensure_board_container()
         self.scene.clearSelection()
         for index, number in enumerate(numbers):
@@ -1000,6 +1040,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"已生成 {len(numbers)} 个手工 PCB PAD（{numbers[0]} 至 {numbers[-1]}），可在 PAD 编辑模式下拖动。"
         )
+        return numbers
 
     def delete_selected_manual_pads(self) -> None:
         selected = self._selected_manual_pad_items()

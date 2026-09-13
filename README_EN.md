@@ -17,6 +17,8 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
   positions, sizes, rotations, shapes, and colors.
 - Batch generation and multi-pad editing support optional signed `delta PAD`, `delta X`, and
   `delta Y` steps in mil or mm.
+- Generate Single PAD always creates exactly the current pad regardless of the batch count, then
+  advances enabled number and coordinate steps for repeated one-click placement.
 - Move manual pads directly on the canvas and align or distribute them left/right/top/bottom and
   horizontally/vertically using automatic or fixed spacing.
 - Use global `Ctrl+Z` to undo pad and BondWire edits, chip/PCB transforms, 3D parameters, and chip
