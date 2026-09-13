@@ -15,8 +15,10 @@ edits BondWire connections, and exports PDF drawings for bonding vendors.
 - Adjust chip position, chip rotation, and PCB footprint rotation.
 - Draw manual pads in a separate PCB PAD generator/editor window with arbitrary numbers,
   positions, sizes, rotations, shapes, and colors.
-- Batch generation and multi-pad editing support optional signed `delta PAD`, `delta X`, and
-  `delta Y` steps in mil or mm.
+- PAD numbers support negative signs such as `-1` and `PAD-01`; batch generation and multi-pad
+  editing support optional signed `delta PAD`, `delta X`, and `delta Y` steps in mil or mm.
+- Pad IDs support negative signs and steps across zero, such as `PAD-01`, `PAD-02`, or
+  `-1`, `0`, `1`.
 - Generate Single PAD always creates exactly the current pad regardless of the batch count, then
   advances enabled number and coordinate steps for repeated one-click placement.
 - Move manual pads directly on the canvas and align or distribute them left/right/top/bottom and

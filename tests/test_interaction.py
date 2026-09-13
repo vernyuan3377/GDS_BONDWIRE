@@ -415,6 +415,32 @@ def test_pad_editor_generates_signed_number_and_xy_steps():
     app.processEvents()
 
 
+def test_pad_number_steps_support_negative_sign_and_cross_zero():
+    app = QApplication.instance() or QApplication([])
+    window = MainWindow()
+    window.pad_editor_dialog.set_mode("generate")
+
+    window.manual_pad_number.setText("PAD-01")
+    window.manual_pad_count.setValue(3)
+    window.manual_pad_delta_number_enabled.setChecked(True)
+    window.manual_pad_delta_number.setValue(-1)
+    window.add_manual_pad_from_controls()
+    assert set(window.board_items) == {"PAD-01", "PAD-02", "PAD-03"}
+
+    window.manual_pad_number.setText("-1")
+    window.manual_pad_count.setValue(1)
+    window.manual_pad_delta_number.setValue(1)
+    window.add_single_manual_pad_from_controls()
+    assert "-1" in window.board_items
+    assert window.manual_pad_number.text() == "0"
+    window.add_single_manual_pad_from_controls()
+    assert "0" in window.board_items
+    assert window.manual_pad_number.text() == "1"
+
+    window.close()
+    app.processEvents()
+
+
 def test_single_pad_button_ignores_batch_count_and_advances_enabled_steps():
     app = QApplication.instance() or QApplication([])
     window = MainWindow()

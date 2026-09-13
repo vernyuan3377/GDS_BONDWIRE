@@ -33,7 +33,8 @@ class ManualPadEditorDialog(QDialog):
 
         layout = QVBoxLayout(self)
         intro = QLabel(
-            "生成模式用于按 ΔPAD、ΔX、ΔY 批量放置；编辑模式用于修改、拖动、对齐和分布所选手工 PAD。"
+            "生成模式用于按 ΔPAD、ΔX、ΔY 放置；PAD 编号支持负号，例如 -1、PAD-01。"
+            "编辑模式用于修改、拖动、对齐和分布所选手工 PAD。"
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)

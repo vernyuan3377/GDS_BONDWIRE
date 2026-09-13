@@ -842,9 +842,11 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _pad_number_sort_key(item: BoardPadItem) -> tuple[str, int, str]:
-        match = re.fullmatch(r"(.*?)(\d+)", item.pad.number)
+        match = re.fullmatch(r"(.*?)([+-]?)(\d+)", item.pad.number)
         if match:
-            return match.group(1), int(match.group(2)), item.pad.number
+            prefix, sign, digits = match.groups()
+            value = int(f"{sign}{digits}")
+            return prefix, value, item.pad.number
         return item.pad.number, 0, item.pad.number
 
     def _ordered_selected_manual_pad_items(self) -> list[BoardPadItem]:
@@ -854,14 +856,19 @@ class MainWindow(QMainWindow):
     def _stepped_pad_number(base: str, delta: int, index: int) -> str | None:
         if index == 0:
             return base
-        match = re.fullmatch(r"(.*?)(\d+)", base)
+        match = re.fullmatch(r"(.*?)([+-]?)(\d+)", base)
         if not match:
             return None
-        prefix, digits = match.groups()
-        value = int(digits) + delta * index
+        prefix, original_sign, digits = match.groups()
+        value = int(f"{original_sign}{digits}") + delta * index
+        formatted = f"{abs(value):0{len(digits)}d}"
         if value < 0:
-            return f"{prefix}{value}"
-        return f"{prefix}{value:0{len(digits)}d}"
+            sign = "-"
+        elif original_sign == "+":
+            sign = "+"
+        else:
+            sign = ""
+        return f"{prefix}{sign}{formatted}"
 
     def _target_pad_numbers(self, base: str, count: int) -> list[str] | None:
         if count <= 1:
@@ -872,7 +879,7 @@ class MainWindow(QMainWindow):
         delta = self.manual_pad_delta_number.value()
         numbers = [self._stepped_pad_number(base, delta, index) for index in range(count)]
         if any(number is None for number in numbers):
-            self.statusBar().showMessage("起始编号必须以数字结尾，例如 1、PAD01，才能使用 ΔPAD。")
+            self.statusBar().showMessage("起始编号必须以数字结尾，例如 -1、PAD-01、PAD01，才能使用 ΔPAD。")
             return None
         result = [str(number) for number in numbers]
         if len(set(result)) != len(result):
